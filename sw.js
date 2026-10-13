@@ -1,50 +1,68 @@
 /**
- * SIGAP Service Worker v2.0
- * Offline-first caching strategy
+ * SIGAP — Service Worker (Offline-First Cache)
+ * Versi Cache: v3.2
  */
+const CACHE_NAME = 'sigap-cache-v3.2';
 
-const CACHE = 'sigap-v2';
-const ASSETS = [
+const OFFLINE_RESOURCES = [
   './',
   './index.html',
   './style.css',
   './app.js',
   './manifest.json',
-  'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js',
-  'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap',
+  './icons/icon.svg',
+  'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'
 ];
 
-self.addEventListener('install', e => {
-  e.waitUntil(
-    caches.open(CACHE)
-      .then(c => c.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' }))))
-      .catch(() => caches.open(CACHE).then(c => c.addAll(['./index.html', './style.css', './app.js'])))
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(cache => {
+      return cache.addAll(OFFLINE_RESOURCES).catch(err => {
+        console.warn('Gagal memuat sebagian resource eksternal saat pre-cache:', err);
+        return cache.addAll(['./', './index.html', './style.css', './app.js', './manifest.json']);
+      });
+    })
   );
   self.skipWaiting();
 });
 
-self.addEventListener('activate', e => {
-  e.waitUntil(
+self.addEventListener('activate', event => {
+  event.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+      Promise.all(
+        keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
+      )
     )
   );
   self.clients.claim();
 });
 
-self.addEventListener('fetch', e => {
-  // Cache-first for same-origin, network-first for CDN
-  if (e.request.url.startsWith(self.location.origin)) {
-    e.respondWith(
-      caches.match(e.request).then(r => r || fetch(e.request).then(nr => {
-        const c = nr.clone();
-        caches.open(CACHE).then(cache => cache.put(e.request, c));
-        return nr;
-      }))
-    );
-  } else {
-    e.respondWith(
-      fetch(e.request).catch(() => caches.match(e.request))
-    );
-  }
+self.addEventListener('fetch', event => {
+  // Hanya proses GET requests
+  if (event.request.method !== 'GET') return;
+
+  event.respondWith(
+    caches.match(event.request).then(cachedResponse => {
+      if (cachedResponse) {
+        // Cache-hit: kembalikan versi offline segera
+        return cachedResponse;
+      }
+      // Cache-miss: coba ambil dari jaringan
+      return fetch(event.request).then(networkResponse => {
+        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+          return networkResponse;
+        }
+        const responseToCache = networkResponse.clone();
+        caches.open(CACHE_NAME).then(cache => {
+          cache.put(event.request, responseToCache);
+        });
+        return networkResponse;
+      }).catch(() => {
+        // Jika jaringan gagal dan tidak ada di cache
+        if (event.request.mode === 'navigate') {
+          return caches.match('./index.html');
+        }
+      });
+    })
+  );
 });

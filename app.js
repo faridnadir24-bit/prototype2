@@ -1,617 +1,870 @@
 'use strict';
 /**
- * SIGAP v3 — app.js
- * Semua interaksi pakai event delegation (tidak ada inline onclick)
- * sehingga tombol dijamin berfungsi pada konten dinamis.
+ * SIGAP — Sistem Gasifikasi Biomassa Pintar (v3.2 Production Industrial)
+ * Arsitektur: Offline-First SPA
+ * Komponen: IndexedDB Local Storage, Engine Simulasi Termokimia,
+ *            AI Anomaly Detector, 3-Layer Fallback (Internet -> SMS -> LoRa),
+ *            Chart.js Telemetri Sensor, PWA Service Worker.
  */
 
-/* ══════════════════════════════════════════
-   UTILS
-══════════════════════════════════════════ */
-const $  = s => document.querySelector(s);
-const $$ = s => [...document.querySelectorAll(s)];
-const rnd    = x => (Math.random() - .5) * 2 * x;
-const fmt    = (n, d = 1) => (+n).toFixed(d);
-const clamp  = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-const uid    = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-const today  = () => new Date().toISOString().slice(0, 10);
+/* ════════════════════════════════════════════════════════════════
+   1. UTILITAS SISTEM
+   ════════════════════════════════════════════════════════════════ */
+const $  = selector => document.querySelector(selector);
+const $$ = selector => [...document.querySelectorAll(selector)];
+const rnd   = spread => (Math.random() - 0.5) * 2 * spread;
+const fmt   = (val, decimals = 1) => Number(val).toFixed(decimals);
+const clamp = (val, min, max) => Math.min(max, Math.max(min, val));
+const uid   = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const todayIso = () => new Date().toISOString().slice(0, 10);
 
-const hms = (d = new Date()) =>
-  d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const fmtTime = (dateObj = new Date()) =>
+  dateObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).replace(/\./g, ':');
 
-const dtShort = s =>
-  new Date(s + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
-
-const tsShort = ts => {
-  const d = new Date(ts);
-  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ' ' + hms(d);
+const fmtDate = isoStr => {
+  if (!isoStr) return '-';
+  const parts = isoStr.split('-');
+  if (parts.length === 3) {
+    const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  return isoStr;
 };
 
-/* ══════════════════════════════════════════
-   CONSTANTS
-══════════════════════════════════════════ */
-const TYPES = ['Sekam Padi', 'Jerami', 'Tongkol Jagung', 'Kayu Chip'];
-
-const TYPE_MARK = {
-  'Sekam Padi'    : { abbr: 'SP', cls: 'bm-sekam'  },
-  'Jerami'        : { abbr: 'JR', cls: 'bm-jerami'  },
-  'Tongkol Jagung': { abbr: 'TJ', cls: 'bm-tongkol' },
-  'Kayu Chip'     : { abbr: 'KC', cls: 'bm-kayu'    },
+const fmtDateTime = timestamp => {
+  const d = new Date(timestamp);
+  return `${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} ${fmtTime(d)}`;
 };
 
-const CHIPS = [
-  { label: 'Semua',         value: '' },
-  { label: 'Sekam Padi',    value: 'Sekam Padi' },
-  { label: 'Jerami',        value: 'Jerami' },
-  { label: 'Tongkol Jagung',value: 'Tongkol Jagung' },
-  { label: 'Kayu Chip',     value: 'Kayu Chip' },
+/* ════════════════════════════════════════════════════════════════
+   2. DATA KONSTANTA & SAMPEL
+   ════════════════════════════════════════════════════════════════ */
+const CHIP_FILTERS = [
+  { label: 'Semua',  value: '' },
+  { label: 'Sekam',  value: 'Sekam Padi' },
+  { label: 'Jerami', value: 'Jerami' },
+  { label: 'Tongkol',value: 'Tongkol Jagung' },
+  { label: 'Kayu',   value: 'Kayu Chip' }
 ];
 
-const MODES = {
-  normal  : { label: 'Normal',     cls: '',        t: 785,  p: 102.3, a: 45.2 },
-  overheat: { label: 'Overheat',   cls: 'sim-crit', t: 945, p: 104.5, a: 52.0 },
-  leak    : { label: 'Kebocoran',  cls: 'sim-warn', t: 765, p: 83.0,  a: 40.0 },
-  tar     : { label: 'Tar',        cls: 'sim-warn', t: 735, p: 101.5, a: 26.0 },
-  cold    : { label: 'Suhu Rendah',cls: 'sim-warn', t: 640, p: 101.0, a: 38.0 },
+const BIOMASS_BADGES = {
+  'Sekam Padi'    : { cls: 'badge-sekam',   abbr: 'SEKAM' },
+  'Jerami'        : { cls: 'badge-jerami',  abbr: 'JERAMI' },
+  'Tongkol Jagung': { cls: 'badge-tongkol', abbr: 'TGKL' },
+  'Kayu Chip'     : { cls: 'badge-kayu',    abbr: 'KAYU' }
 };
 
-const METHODS = {
-  internet: { name: 'Internet',  desc: 'Via sinyal data — kecepatan tinggi',     speed: '~1 detik',  ms: 900,  icon: netIcon()    },
-  sms     : { name: 'SMS',       desc: 'Paket data kecil melalui jaringan GSM',  speed: '~8 detik',  ms: 3200, icon: smsIcon()    },
-  lora    : { name: 'LoRa',      desc: 'Radio jarak jauh ke gateway desa',       speed: '~25 detik', ms: 8000, icon: radioIcon()  },
+// Skenario simulasi operasional reaktor
+const SIM_MODES = {
+  normal: {
+    label: 'Simulasi Normal',
+    hint: 'Suhu 785°C · Tekanan 102.3 kPa · Syngas Optimal',
+    cls: '',
+    t: 785, p: 102.3, a: 45.2
+  },
+  overheat: {
+    label: 'Simulasi Overheat',
+    hint: 'Suhu > 900°C · Risiko Slagging Abu',
+    cls: 'sim-crit',
+    t: 948, p: 104.2, a: 54.0
+  },
+  leak: {
+    label: 'Simulasi Kebocoran',
+    hint: 'Tekanan drop < 90 kPa · Periksa Flensa',
+    cls: 'sim-warn',
+    t: 765, p: 83.5, a: 42.0
+  },
+  tar: {
+    label: 'Simulasi Tar',
+    hint: 'Laju udara rendah < 32 L/min · Tar Meningkat',
+    cls: 'sim-warn',
+    t: 730, p: 101.8, a: 25.5
+  },
+  cold: {
+    label: 'Simulasi Suhu Rendah',
+    hint: 'Suhu < 700°C · Oksidasi Kurang Optimal',
+    cls: 'sim-warn',
+    t: 635, p: 100.5, a: 36.0
+  }
 };
 
-const SAMPLE = [
+// Jalur sinkronisasi data
+const SYNC_METHODS = {
+  auto: {
+    name: '3-Layer Fallback (Otomatis)',
+    desc: 'Prioritas: Internet Cloud → SMS GSM → Radio LoRa',
+    speed: 'Multi-layer',
+    iconSvg: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>`
+  },
+  internet: {
+    name: 'Internet Gateway',
+    desc: 'Koneksi data seluler / WiFi langsung ke Cloud Database',
+    speed: '~1 detik',
+    iconSvg: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 0 20M12 2a15.3 15.3 0 0 0 0 20"/></svg>`
+  },
+  sms: {
+    name: 'SMS GSM Modem (SIM800L)',
+    desc: 'Paket telemetri terkompresi Base64 via jaringan 2G/GSM',
+    speed: '~6 detik',
+    iconSvg: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`
+  },
+  lora: {
+    name: 'LoRa Mesh (915 MHz SX1276)',
+    desc: 'Transceiver nirkabel jarak jauh ke Gateway Kantor Desa',
+    speed: '~15 detik',
+    iconSvg: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>`
+  }
+};
+
+// Data biomassa awal (Pre-populated sample)
+const INITIAL_BIOMASS = [
   { id: uid(), type: 'Sekam Padi',     weight: 150, moisture: 12, date: '2026-10-10' },
   { id: uid(), type: 'Jerami',         weight: 80,  moisture: 15, date: '2026-10-11' },
   { id: uid(), type: 'Tongkol Jagung', weight: 120, moisture: 10, date: '2026-10-12' },
-  { id: uid(), type: 'Kayu Chip',      weight: 200, moisture: 8,  date: '2026-10-13' },
+  { id: uid(), type: 'Kayu Chip',      weight: 200, moisture: 8,  date: '2026-10-13' }
 ];
 
-/* SVG icon helpers for methods (no CDN, no emoji) */
-function netIcon() {
-  return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>`;
-}
-function smsIcon() {
-  return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>`;
-}
-function radioIcon() {
-  return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>`;
-}
-
-/* ══════════════════════════════════════════
-   APP STATE
-══════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════
+   3. STATE APLIKASI
+   ════════════════════════════════════════════════════════════════ */
 const S = {
-  biomass  : [],
-  logs     : [],
-  queue    : [],
-  syncLogs : [],
-  readings : [],
-  meta     : { kwh: 12.4, lastSync: null },
-  mode     : 'normal',
-  cur      : { t: 785, p: 102.3, a: 45.2 },
-  gas      : { CO: 22.5, H2: 15.8, CH4: 4.2, CO2: 12.1 },
-  kw       : 2.3,
-  an       : { level: 0, items: [] },
+  // Penyimpanan data lokal
+  biomass:  [],
+  logs:     [],
+  queue:    [],
+  syncLogs: [],
+  readings: [],
+  meta: {
+    kwh: 12.4,
+    lastSync: null
+  },
+
+  // Telemetri sensor aktif
+  mode: 'normal',
+  cur: {
+    t: 785.0,  // Suhu reaktor (°C)
+    p: 102.3,  // Tekanan (kPa)
+    a: 45.2    // Aliran udara (L/min)
+  },
+  gas: {
+    CO: 22.5,
+    H2: 15.8,
+    CH4: 4.2,
+    CO2: 12.1
+  },
+  kw: 2.30,
+
+  // Diagnosa anomali AI
+  anomaly: {
+    level: 0, // 0: Normal, 1: Waspada, 2: Kritis
+    items: []
+  },
   prevLevel: 0,
-  ticks    : 0,
-  mon      : { labels: [], t: [], p: [] },
-  pred     : [],
-  opt      : false,
-  online   : navigator.onLine,
-  filter   : '',
-  q        : '',
-  method   : 'internet',
-  syncing  : false,
-  editId   : null,
-  deleteId : null,
-  charts   : {},
-  screen   : 'dashboard',
+  tickCount: 0,
+
+  // Data grafik real-time
+  monData: {
+    labels: [],
+    temp: [],
+    press: []
+  },
+
+  // Prediksi AI
+  predictions: [],
+  isOptimized: false,
+
+  // Status koneksi & filter
+  isOnline: false, // Default offline sesuai kondisi desa terpencil
+  filterType: '',
+  searchQuery: '',
+  selectedMethod: 'auto',
+  isSyncing: false,
+
+  // Referensi Modal
+  activeEditId: null,
+  pendingDeleteId: null,
+
+  // Instance Chart.js
+  charts: {
+    mon: null,
+    pred: null
+  },
+  activeScreen: 'dashboard'
 };
 
-/* ══════════════════════════════════════════
-   INDEXEDDB / LOCALSTORAGE
-══════════════════════════════════════════ */
-const DB = {
+/* ════════════════════════════════════════════════════════════════
+   4. PENYIMPANAN OFFLINE (INDEXEDDB + LOCALSTORAGE FALLBACK)
+   ════════════════════════════════════════════════════════════════ */
+const LocalDB = {
   db: null,
   async init() {
     try {
-      this.db = await new Promise((ok, no) => {
-        const r = indexedDB.open('sigap-v3', 1);
-        r.onupgradeneeded = () => r.result.createObjectStore('kv');
-        r.onsuccess = () => ok(r.result);
-        r.onerror   = () => no(r.error);
+      this.db = await new Promise((resolve, reject) => {
+        const req = indexedDB.open('sigap_village_iot_v3', 1);
+        req.onupgradeneeded = e => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('store')) {
+            db.createObjectStore('store');
+          }
+        };
+        req.onsuccess = e => resolve(e.target.result);
+        req.onerror = e => reject(e.target.error);
       });
-    } catch { this.db = null; }
+    } catch {
+      this.db = null;
+    }
   },
-  _lsGet(k) { return JSON.parse(localStorage.getItem('sigap3.' + k) || 'null'); },
-  _lsSet(k, v) { try { localStorage.setItem('sigap3.' + k, JSON.stringify(v)); } catch {} },
-  get(k) {
-    if (!this.db) return Promise.resolve(this._lsGet(k));
-    return new Promise(ok => {
-      const r = this.db.transaction('kv').objectStore('kv').get(k);
-      r.onsuccess = () => ok(r.result ?? null);
-      r.onerror   = () => ok(null);
+  get(key) {
+    if (!this.db) {
+      try { return Promise.resolve(JSON.parse(localStorage.getItem('sigap_' + key) || 'null')); }
+      catch { return Promise.resolve(null); }
+    }
+    return new Promise(resolve => {
+      const tx = this.db.transaction('store', 'readonly');
+      const req = tx.objectStore('store').get(key);
+      req.onsuccess = () => resolve(req.result ?? null);
+      req.onerror = () => resolve(null);
     });
   },
-  set(k, v) {
-    if (!this.db) { this._lsSet(k, v); return Promise.resolve(); }
-    return new Promise(ok => {
-      const t = this.db.transaction('kv', 'readwrite');
-      t.objectStore('kv').put(JSON.parse(JSON.stringify(v)), k);
-      t.oncomplete = ok; t.onerror = ok;
+  set(key, val) {
+    try { localStorage.setItem('sigap_' + key, JSON.stringify(val)); } catch {}
+    if (!this.db) return Promise.resolve();
+    return new Promise(resolve => {
+      const tx = this.db.transaction('store', 'readwrite');
+      tx.objectStore('store').put(JSON.parse(JSON.stringify(val)), key);
+      tx.oncomplete = resolve;
+      tx.onerror = resolve;
     });
-  },
+  }
 };
 
-const save = () => DB.set('state', {
-  biomass : S.biomass,
-  logs    : S.logs,
-  queue   : S.queue,
+const persistState = () => LocalDB.set('state', {
+  biomass:  S.biomass,
+  logs:     S.logs,
+  queue:    S.queue,
   syncLogs: S.syncLogs,
-  meta    : S.meta,
+  meta:     S.meta
 });
 
-/* ══════════════════════════════════════════
-   LOG & QUEUE
-══════════════════════════════════════════ */
-function addLog(text, lvl = 'ok') {
-  S.logs.unshift({ ts: Date.now(), text, lvl });
+/* ════════════════════════════════════════════════════════════════
+   5. LOGGING & ANTREAN SINKRONISASI OFFLINE
+   ════════════════════════════════════════════════════════════════ */
+function addLog(text, level = 'ok') {
+  S.logs.unshift({ ts: Date.now(), text, lvl: level });
   if (S.logs.length > 50) S.logs.length = 50;
-  if (S.screen === 'dashboard') renderLog();
-  save();
+  if (S.activeScreen === 'dashboard') renderLogStream();
+  persistState();
 }
 
-function enqueue(type, desc) {
+function enqueueSyncItem(type, desc) {
   S.queue.push({ id: uid(), type, desc, ts: Date.now() });
-  renderNavBadge();
-  if (S.screen === 'sinkronisasi') renderSync();
-  save();
+  updateQueueBadges();
+  if (S.activeScreen === 'sinkronisasi') renderSyncScreen();
+  persistState();
 }
 
-function toast(msg, ms = 2800) {
-  const el = $('#toast');
-  if (!el) return;
-  el.textContent = msg;
-  el.classList.remove('hidden');
-  clearTimeout(toast._t);
-  toast._t = setTimeout(() => el.classList.add('hidden'), ms);
+function showToast(message, durationMs = 2800) {
+  const toastEl = $('#toast');
+  if (!toastEl) return;
+  toastEl.textContent = message;
+  toastEl.classList.remove('hidden');
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(() => toastEl.classList.add('hidden'), durationMs);
 }
 
-/* ══════════════════════════════════════════
-   SIMULATION ENGINE
-══════════════════════════════════════════ */
-function tick() {
-  const m = MODES[S.mode], c = S.cur;
+/* ════════════════════════════════════════════════════════════════
+   6. MESIN SIMULASI GASIFIKASI (3-DETIK LOOP)
+   ════════════════════════════════════════════════════════════════ */
+function runSimulationTick() {
+  const targetMode = SIM_MODES[S.mode] || SIM_MODES.normal;
+  const cur = S.cur;
 
-  c.t += (m.t - c.t) * .18 + rnd(7);
-  c.p += (m.p - c.p) * .18 + rnd(.6);
-  c.a  = clamp(c.a + (m.a - c.a) * .18 + rnd(1.2), 5, 80);
+  // Konvergensi realistis terhadap nilai target skenario + fluktuasi termal
+  cur.t += (targetMode.t - cur.t) * 0.20 + rnd(6.5);
+  cur.p += (targetMode.p - cur.p) * 0.20 + rnd(0.5);
+  cur.a = clamp(cur.a + (targetMode.a - cur.a) * 0.20 + rnd(1.0), 8, 80);
 
-  const dT = c.t - 785, g = S.gas;
-  g.CO  = clamp(22.5 + dT * .038 + rnd(.5), 5, 35);
-  g.H2  = clamp(15.8 + dT * .028 + rnd(.4), 4, 28);
-  g.CH4 = clamp(4.2  - dT * .014 + rnd(.2), .5, 9);
-  g.CO2 = clamp(12.1 + (c.a - 45) * .06 + rnd(.3), 4, 22);
+  // Komposisi gas syngas (korelasi termokimia gasifikasi downdraft)
+  const deltaT = cur.t - 785;
+  const gas = S.gas;
+  gas.CO  = clamp(22.5 + deltaT * 0.035 + rnd(0.4), 6, 36);
+  gas.H2  = clamp(15.8 + deltaT * 0.026 + rnd(0.35), 4, 30);
+  gas.CH4 = clamp(4.2  - deltaT * 0.012 + rnd(0.18), 0.5, 9.5);
+  gas.CO2 = clamp(12.1 + (cur.a - 45) * 0.055 + rnd(0.25), 4, 24);
 
-  const lhv = .1263 * g.CO + .1078 * g.H2 + .3589 * g.CH4;
-  const eff  = (c.t >= 700 && c.t <= 900) ? 1 : .65;
-  S.kw = Math.max(0, lhv * c.a * .06 * 2 / 3.6 * .25 * eff);
-  S.meta.kwh += S.kw * 3 / 3600 * 60;
+  // Perhitungan LHV (Lower Heating Value) syngas dalam MJ/Nm³
+  // Formula: LHV = 0.1263*CO + 0.1078*H2 + 0.3589*CH4
+  const lhv = 0.1263 * gas.CO + 0.1078 * gas.H2 + 0.3589 * gas.CH4;
 
-  const newAn = analyze();
-  if (newAn.level !== S.prevLevel) {
-    const lbl = ['kembali NORMAL', 'WASPADA', 'KRITIS'][newAn.level];
-    addLog(`Status reaktor ${lbl}: ${newAn.items[0].text}`, ['ok','warn','crit'][newAn.level]);
-    if (newAn.level > 0) enqueue('peringatan', `${['','WASPADA','KRITIS'][newAn.level]}: ${newAn.items[0].text}`);
-    S.prevLevel = newAn.level;
+  // Efisiensi gasifier optimal pada 700°C - 900°C
+  const tempEfficiency = (cur.t >= 700 && cur.t <= 900) ? 0.84 : 0.62;
+
+  // Daya listrik generator kWe
+  S.kw = Math.max(0.2, lhv * cur.a * 0.06 * 2 / 3.6 * 0.25 * (tempEfficiency / 0.84));
+  S.meta.kwh += S.kw * (3 / 3600) * 40; // Percepatan akumulasi daya untuk demo
+
+  // Evaluasi anomali sistem AI
+  const currentAnomaly = evaluateSystemAnomalies();
+  if (currentAnomaly.level !== S.prevLevel) {
+    const levelTags = ['kembali NORMAL', 'WASPADA', 'KRITIS'];
+    const cssLevels = ['ok', 'warn', 'crit'];
+    addLog(`Kondisi reaktor ${levelTags[currentAnomaly.level]}: ${currentAnomaly.items[0]}`, cssLevels[currentAnomaly.level]);
+
+    if (currentAnomaly.level > 0) {
+      enqueueSyncItem('peringatan', `${levelTags[currentAnomaly.level]}: ${currentAnomaly.items[0]}`);
+    }
+    S.prevLevel = currentAnomaly.level;
   }
-  S.an = newAn;
+  S.anomaly = currentAnomaly;
 
-  const reading = {
-    waktu  : new Date().toISOString(),
-    suhu   : +fmt(c.t), tekanan: +fmt(c.p), udara: +fmt(c.a),
-    CO: +fmt(g.CO), H2: +fmt(g.H2), CH4: +fmt(g.CH4), CO2: +fmt(g.CO2),
-    kw: +fmt(S.kw, 2),
-    status : ['NORMAL','WARNING','CRITICAL'][newAn.level],
+  // Catat telemetri ke buffer memori
+  const readingSnap = {
+    waktu: new Date().toISOString(),
+    suhu: +fmt(cur.t),
+    tekanan: +fmt(cur.p),
+    aliranUdara: +fmt(cur.a),
+    CO: +fmt(gas.CO),
+    H2: +fmt(gas.H2),
+    CH4: +fmt(gas.CH4),
+    CO2: +fmt(gas.CO2),
+    lhv: +fmt(lhv, 2),
+    dayaKw: +fmt(S.kw, 2),
+    status: ['NORMAL', 'WARNING', 'CRITICAL'][currentAnomaly.level]
   };
-  S.readings.push(reading);
-  if (S.readings.length > 300) S.readings.shift();
+  S.readings.push(readingSnap);
+  if (S.readings.length > 200) S.readings.shift();
 
-  S.mon.labels.push(hms());
-  S.mon.t.push(reading.suhu);
-  S.mon.p.push(reading.tekanan);
-  if (S.mon.t.length > 24) { S.mon.labels.shift(); S.mon.t.shift(); S.mon.p.shift(); }
+  // Update buffer grafik 24-titik
+  S.monData.labels.push(fmtTime());
+  S.monData.temp.push(readingSnap.suhu);
+  S.monData.press.push(readingSnap.tekanan);
+  if (S.monData.temp.length > 24) {
+    S.monData.labels.shift();
+    S.monData.temp.shift();
+    S.monData.press.shift();
+  }
 
-  S.ticks++;
-  if (S.ticks % 20 === 0) enqueue('sensor', 'Batch data sensor reaktor');
-  if (S.ticks % 5  === 0) save();
-  if (S.ticks % 8  === 0) computePred();
+  S.tickCount++;
+  // Antrekan batch sensor berkala
+  if (S.tickCount % 20 === 0) {
+    enqueueSyncItem('sensor', `Batch telemetri reaktor (${fmt(cur.t, 0)}°C, ${fmt(cur.p, 1)} kPa)`);
+  }
+  if (S.tickCount % 6 === 0) persistState();
+  if (S.tickCount % 10 === 0) recalculatePredictions();
 
-  renderLive();
+  // Render perubahan nilai telemetri ke DOM
+  renderLiveTelemetry();
 }
 
-/* ══════════════════════════════════════════
-   ANOMALY DETECTION
-══════════════════════════════════════════ */
-function analyze() {
+/* ════════════════════════════════════════════════════════════════
+   7. AI DETEKSI ANOMALI & REKOMENDASI (BAHASA INDONESIA)
+   ════════════════════════════════════════════════════════════════ */
+function evaluateSystemAnomalies() {
   const { t, p, a } = S.cur;
   const items = [];
-  let level = 0;
-  const cf = base => Math.round(clamp(base + rnd(2.5), 60, 99));
+  let level = 0; // 0: Normal, 1: Waspada, 2: Kritis
 
+  const calcConf = base => Math.round(clamp(base + rnd(2.5), 70, 99));
+
+  // Syarat Anomali 1: Suhu Tinggi (>900°C)
   if (t > 900) {
-    items.push({ text: 'Suhu tinggi — kurangi pasokan udara masuk', conf: cf(82 + (t - 900) / 5) });
+    items.push('Suhu tinggi, kurangi udara');
     level = Math.max(level, t > 950 ? 2 : 1);
   }
+
+  // Syarat Anomali 2: Suhu Rendah (<700°C)
   if (t < 700) {
-    items.push({ text: 'Suhu rendah — tambah oksigen atau udara primer', conf: cf(83 + (700 - t) / 5) });
-    level = Math.max(level, t < 600 ? 2 : 1);
+    items.push('Suhu rendah, tambah oksigen');
+    level = Math.max(level, t < 620 ? 2 : 1);
   }
-  if (a < 32 && t < 790) {
-    items.push({ text: 'Tar terdeteksi — rasio udara terhadap biomassa terlalu rendah', conf: cf(88) });
+
+  // Syarat Anomali 3: Tar terdeteksi (aliran udara defisit pada suhu pirolisis)
+  if (a < 32 && t < 780) {
+    items.push('Rasio udara terlalu rendah');
     level = Math.max(level, 1);
   }
+
+  // Syarat Anomali 4: Penurunan tekanan (kebocoran)
   if (p < 95) {
-    items.push({ text: 'Tekanan turun — periksa kemungkinan kebocoran pada sistem', conf: cf(84 + (95 - p)) });
+    items.push('Kemungkinan kebocoran');
     level = Math.max(level, p < 88 ? 2 : 1);
   }
-  if (!items.length) {
-    items.push({ text: 'Semua parameter dalam batas operasi normal', conf: cf(96) });
+
+  if (items.length === 0) {
+    items.push('Kondisi operasional normal dan reaksi stabil pada target 700–900°C.');
   }
-  return { level, items };
+
+  const confidence = calcConf(level === 2 ? 96 : (level === 1 ? 92 : 98));
+  return { level, items, confidence };
 }
 
-/* ══════════════════════════════════════════
-   AI PREDICTION
-══════════════════════════════════════════ */
-function computePred() {
-  const factors = S.opt
-    ? [1.06, 1.13, 1.19, 1.17, 1.11, 1.07]
-    : [1.00, 1.04, 1.09, 1.05, 0.97, 0.91];
-  const base = Math.max(S.kw, .1);
-  S.pred = factors.map((f, i) => +fmt(base * f * (1 + Math.sin(i * .6) * .015), 2));
-  if (S.screen === 'prediksi') renderPred();
+/* ════════════════════════════════════════════════════════════════
+   8. AI PREDIKSI PRODUKSI LISTRIK (6 JAM KE DEPAN)
+   ════════════════════════════════════════════════════════════════ */
+function recalculatePredictions() {
+  const basePower = Math.max(S.kw, 0.4);
+  // Multiplier kurva output gasifier
+  const curve = S.isOptimized
+    ? [1.06, 1.15, 1.20, 1.18, 1.12, 1.08]
+    : [1.00, 1.05, 1.11, 1.06, 0.98, 0.92];
+
+  S.predictions = curve.map((multiplier, idx) => {
+    const val = basePower * multiplier * (1 + Math.sin(idx * 0.7) * 0.015);
+    return +fmt(val, 2);
+  });
+
+  if (S.activeScreen === 'prediksi') {
+    renderPredictionScreen();
+  }
 }
 
-/* ══════════════════════════════════════════
-   CHARTS (Chart.js + canvas fallback)
-══════════════════════════════════════════ */
-function makeMonitorChart() {
-  const ctx = $('#monChart');
-  if (!ctx) return;
-  if (S.charts.mon) { S.charts.mon.destroy(); S.charts.mon = null; }
-  if (typeof Chart === 'undefined') { fbChart(ctx, S.mon.labels, S.mon.t, '#EF4444'); return; }
+/* ════════════════════════════════════════════════════════════════
+   9. GRAFIK (CHART.JS DENGAN FALLBACK CANVAS MANDIRI)
+   ════════════════════════════════════════════════════════════════ */
+function buildMonitorChart() {
+  const canvas = $('#monChart');
+  if (!canvas) return;
 
-  S.charts.mon = new Chart(ctx, {
+  if (S.charts.mon) {
+    S.charts.mon.destroy();
+    S.charts.mon = null;
+  }
+
+  // Fallback kanvas jika Chart.js CDN tidak tersedia
+  if (typeof Chart === 'undefined') {
+    renderCanvasChartFallback(canvas, S.monData.labels, S.monData.temp, '#E74C3C', 'Suhu (°C)');
+    return;
+  }
+
+  S.charts.mon = new Chart(canvas, {
     type: 'line',
     data: {
-      labels: S.mon.labels,
+      labels: S.monData.labels,
       datasets: [
         {
-          label: 'Suhu (°C)',
-          data: S.mon.t,
-          borderColor: '#EF4444',
-          backgroundColor: 'rgba(239,68,68,.07)',
-          fill: true, tension: .4, pointRadius: 0, borderWidth: 2,
-          yAxisID: 'y',
+          label: 'Suhu Reaktor (°C)',
+          data: S.monData.temp,
+          borderColor: '#E74C3C',
+          backgroundColor: 'rgba(231, 76, 60, 0.08)',
+          borderWidth: 2.2,
+          fill: true,
+          tension: 0.35,
+          pointRadius: 0,
+          yAxisID: 'yTemp'
         },
         {
           label: 'Tekanan (kPa)',
-          data: S.mon.p,
-          borderColor: '#3B82F6',
-          backgroundColor: 'rgba(59,130,246,.05)',
-          fill: true, tension: .4, pointRadius: 0, borderWidth: 2,
-          yAxisID: 'y1',
-        },
-      ],
+          data: S.monData.press,
+          borderColor: '#2980B9',
+          backgroundColor: 'rgba(41, 128, 185, 0.05)',
+          borderWidth: 1.8,
+          borderDash: [4, 3],
+          fill: false,
+          tension: 0.35,
+          pointRadius: 0,
+          yAxisID: 'yPress'
+        }
+      ]
     },
     options: {
-      responsive: true, maintainAspectRatio: false,
+      responsive: true,
+      maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { position: 'top', labels: { font: { size: 11, family: 'Inter' }, boxWidth: 10, padding: 10 } },
+        legend: {
+          position: 'top',
+          labels: { font: { size: 10.5, family: 'Inter' }, boxWidth: 12, padding: 8 }
+        }
       },
       scales: {
-        x:  { ticks: { font: { size: 9 }, maxTicksLimit: 5, color: '#7A9A8A' }, grid: { color: '#E0EAE4' } },
-        y:  { position: 'left',  ticks: { font: { size: 9 }, color: '#EF4444' }, grid: { color: '#E0EAE4' } },
-        y1: { position: 'right', ticks: { font: { size: 9 }, color: '#3B82F6' }, grid: { drawOnChartArea: false } },
+        x: {
+          ticks: { font: { size: 9 }, maxTicksLimit: 6, color: '#859B8F' },
+          grid: { color: '#EAEFEA' }
+        },
+        yTemp: {
+          position: 'left',
+          ticks: { font: { size: 9 }, color: '#E74C3C' },
+          grid: { color: '#EAEFEA' },
+          title: { display: true, text: '°C', color: '#E74C3C', font: { size: 9.5 } }
+        },
+        yPress: {
+          position: 'right',
+          ticks: { font: { size: 9 }, color: '#2980B9' },
+          grid: { drawOnChartArea: false },
+          title: { display: true, text: 'kPa', color: '#2980B9', font: { size: 9.5 } }
+        }
       },
-      animation: { duration: 300 },
-    },
+      animation: { duration: 300 }
+    }
   });
 }
 
 function updateMonitorChart() {
-  const ch = S.charts.mon;
-  if (!ch) return;
-  ch.data.labels          = [...S.mon.labels];
-  ch.data.datasets[0].data = [...S.mon.t];
-  ch.data.datasets[1].data = [...S.mon.p];
-  ch.update('none');
+  const chart = S.charts.mon;
+  if (!chart) return;
+  chart.data.labels = [...S.monData.labels];
+  chart.data.datasets[0].data = [...S.monData.temp];
+  chart.data.datasets[1].data = [...S.monData.press];
+  chart.update('none');
 }
 
-function makePredChart() {
-  const ctx = $('#predChart');
-  if (!ctx) return;
-  if (S.charts.pred) { S.charts.pred.destroy(); S.charts.pred = null; }
+function buildPredictionChart() {
+  const canvas = $('#predChart');
+  if (!canvas) return;
 
-  const now    = new Date();
-  const labels = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(now.getTime() + (i + 1) * 3600_000);
-    return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-  });
-  const data = S.pred.length === 6 ? S.pred : [2.3, 2.4, 2.6, 2.5, 2.2, 2.0];
-
-  if (typeof Chart === 'undefined') { fbChart(ctx, labels, data, '#16A34A'); return; }
-
-  S.charts.pred = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        {
-          label: 'Prediksi Daya (kW)',
-          data,
-          borderColor: '#16A34A',
-          backgroundColor: 'rgba(22,163,74,.08)',
-          fill: true, tension: .4,
-          pointRadius: 4, pointBackgroundColor: '#16A34A',
-          pointBorderColor: '#fff', pointBorderWidth: 2,
-          borderWidth: 2.5,
-        },
-        {
-          label: 'Daya saat ini',
-          data: Array(6).fill(+fmt(S.kw, 2)),
-          borderColor: '#CA8A04', borderDash: [5, 4],
-          borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0,
-        },
-      ],
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'top', labels: { font: { size: 11, family: 'Inter' }, boxWidth: 10, padding: 10 } },
-      },
-      scales: {
-        x: { ticks: { font: { size: 9 }, color: '#7A9A8A' }, grid: { color: '#E0EAE4' } },
-        y: { ticks: { font: { size: 9 }, color: '#16A34A', callback: v => v + ' kW' }, grid: { color: '#E0EAE4' }, beginAtZero: false },
-      },
-      animation: { duration: 500 },
-    },
-  });
-}
-
-function updatePredChart() {
-  const ch = S.charts.pred;
-  if (!ch || !S.pred.length) return;
-  ch.data.datasets[0].data = [...S.pred];
-  ch.data.datasets[1].data = Array(6).fill(+fmt(S.kw, 2));
-  ch.update();
-}
-
-/** Simple canvas fallback if Chart.js CDN unavailable */
-function fbChart(cv, labels, data, color) {
-  const dpr = window.devicePixelRatio || 1;
-  const w = cv.clientWidth || 300, h = cv.clientHeight || 180;
-  cv.width = w * dpr; cv.height = h * dpr;
-  const ctx = cv.getContext('2d');
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, w, h);
-  const pad = { t: 20, b: 20, l: 36, r: 10 };
-  const iw = w - pad.l - pad.r, ih = h - pad.t - pad.b;
-  const n = data.length;
-  if (!n) return;
-  const mn = Math.min(...data), mx = Math.max(...data), rng = (mx - mn) || 1;
-  const px = i => pad.l + (i / Math.max(n - 1, 1)) * iw;
-  const py = v => pad.t + ih - ((v - mn) / rng) * ih;
-
-  // Grid
-  ctx.strokeStyle = '#E0EAE4'; ctx.lineWidth = 1;
-  for (let g = 0; g <= 4; g++) {
-    const y = pad.t + g * ih / 4;
-    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke();
+  if (S.charts.pred) {
+    S.charts.pred.destroy();
+    S.charts.pred = null;
   }
 
-  // Fill
-  ctx.beginPath();
-  data.forEach((v, i) => i ? ctx.lineTo(px(i), py(v)) : ctx.moveTo(px(i), py(v)));
-  ctx.lineTo(px(n - 1), pad.t + ih); ctx.lineTo(px(0), pad.t + ih); ctx.closePath();
-  ctx.fillStyle = color + '14'; ctx.fill();
+  const now = new Date();
+  const timeLabels = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getTime() + (i + 1) * 3600 * 1000);
+    return `+${i + 1}j (${d.getHours().toString().padStart(2, '0')}:00)`;
+  });
 
-  // Line
-  ctx.beginPath();
-  data.forEach((v, i) => i ? ctx.lineTo(px(i), py(v)) : ctx.moveTo(px(i), py(v)));
-  ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
-  ctx.stroke();
+  const predValues = S.predictions.length === 6 ? S.predictions : [2.3, 2.45, 2.62, 2.50, 2.30, 2.15];
 
-  // Dots
-  ctx.fillStyle = color;
-  data.forEach((v, i) => { ctx.beginPath(); ctx.arc(px(i), py(v), 3.5, 0, Math.PI * 2); ctx.fill(); });
+  if (typeof Chart === 'undefined') {
+    renderCanvasChartFallback(canvas, timeLabels, predValues, '#27AE60', 'Prediksi (kW)');
+    return;
+  }
 
-  // Y-axis labels
-  ctx.fillStyle = '#7A9A8A'; ctx.font = '10px Inter,sans-serif'; ctx.textAlign = 'right';
-  ctx.fillText(fmt(mx, 1), pad.l - 4, py(mx) + 4);
-  ctx.fillText(fmt(mn, 1), pad.l - 4, py(mn) + 4);
-
-  // X-axis labels
-  ctx.textAlign = 'center';
-  [0, Math.floor(n / 2), n - 1].forEach(i => {
-    if (labels[i]) ctx.fillText(labels[i], px(i), h - 4);
+  S.charts.pred = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: timeLabels,
+      datasets: [
+        {
+          label: 'Estimasi Daya (kW)',
+          data: predValues,
+          borderColor: '#27AE60',
+          backgroundColor: 'rgba(39, 174, 96, 0.12)',
+          borderWidth: 2.5,
+          fill: true,
+          tension: 0.4,
+          pointRadius: 4.5,
+          pointBackgroundColor: '#27AE60',
+          pointBorderColor: '#FFFFFF',
+          pointBorderWidth: 2
+        },
+        {
+          label: 'Daya Saat Ini (Baseline)',
+          data: Array(6).fill(+fmt(S.kw, 2)),
+          borderColor: '#F39C12',
+          borderDash: [5, 4],
+          borderWidth: 1.5,
+          pointRadius: 0,
+          fill: false
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { font: { size: 10.5, family: 'Inter' }, boxWidth: 12, padding: 8 }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { font: { size: 9.5 }, color: '#859B8F' },
+          grid: { color: '#EAEFEA' }
+        },
+        y: {
+          ticks: {
+            font: { size: 9.5 },
+            color: '#27AE60',
+            callback: val => val + ' kW'
+          },
+          grid: { color: '#EAEFEA' },
+          beginAtZero: false
+        }
+      },
+      animation: { duration: 450 }
+    }
   });
 }
 
-/* ══════════════════════════════════════════
-   RENDER — LIVE SENSOR VALUES (every 3s)
-══════════════════════════════════════════ */
-function renderLive() {
-  const c = S.cur, g = S.gas, an = S.an;
-  const lv  = an.level; // 0=ok, 1=warn, 2=crit
-  const cls = ['ok', 'warn', 'crit'][lv];
-  const txt = ['NORMAL', 'WASPADA', 'KRITIS'][lv];
-  const badge = ['Optimal', 'Waspada', 'Kritis'][lv];
+function updatePredictionChart() {
+  const chart = S.charts.pred;
+  if (!chart || S.predictions.length !== 6) return;
+  chart.data.datasets[0].data = [...S.predictions];
+  chart.data.datasets[1].data = Array(6).fill(+fmt(S.kw, 2));
+  chart.update();
+}
 
-  /* ── Dashboard ── */
-  setText('cTemp',  fmt(c.t, 0));
-  setText('cKwh',   fmt(S.meta.kwh, 1));
-  setText('qsPressure', fmt(c.p, 1));
-  setText('qsAirflow',  fmt(c.a, 1));
-  setText('qsPower',    fmt(S.kw, 2));
+// Fallback Canvas jika tanpa internet / CDN gagal
+function renderCanvasChartFallback(canvas, labels, values, strokeColor, labelText) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth || 320;
+  const h = canvas.clientHeight || 180;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
 
-  const sc = $('#statusCard');
-  if (sc) { sc.className = `status-card ${cls}`; }
-  setText('dashStatusTxt',   txt);
-  setText('dashStatusBadge', badge);
+  const pad = { t: 20, b: 24, l: 36, r: 12 };
+  const innerW = w - pad.l - pad.r;
+  const innerH = h - pad.t - pad.b;
+  const count = values.length;
+  if (count === 0) return;
 
-  const dot = $('#statusDot');
-  if (dot) { dot.style.background = ['var(--ok)','var(--warn)','var(--crit)'][lv]; }
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = (max - min) || 1;
 
-  // Dashboard anomaly
-  const da = $('#dashAnomaly');
-  if (da) {
-    if (lv > 0) {
-      da.classList.remove('hidden');
-      da.className = `alert-card${lv === 2 ? ' crit' : ''}`;
-      setText('dashAnomalyMsg',  an.items[0].text);
-      setText('dashAnomalyConf', an.items[0].conf + '% yakin');
+  const getX = i => pad.l + (i / Math.max(count - 1, 1)) * innerW;
+  const getY = v => pad.t + innerH - ((v - min) / range) * innerH;
+
+  // Grid garis horizontal
+  ctx.strokeStyle = '#DCE8E1';
+  ctx.lineWidth = 1;
+  for (let g = 0; g <= 4; g++) {
+    const y = pad.t + (g / 4) * innerH;
+    ctx.beginPath();
+    ctx.moveTo(pad.l, y);
+    ctx.lineTo(w - pad.r, y);
+    ctx.stroke();
+  }
+
+  // Area garis kurva
+  ctx.beginPath();
+  values.forEach((v, i) => i === 0 ? ctx.moveTo(getX(i), getY(v)) : ctx.lineTo(getX(i), getY(v)));
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = 2.4;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  // Titik data
+  ctx.fillStyle = strokeColor;
+  values.forEach((v, i) => {
+    ctx.beginPath();
+    ctx.arc(getX(i), getY(v), 3, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // Teks legenda
+  ctx.fillStyle = '#51685C';
+  ctx.font = '10px Inter, sans-serif';
+  ctx.fillText(labelText, pad.l, 14);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   10. RENDER FUNGSI VIEW
+   ════════════════════════════════════════════════════════════════ */
+
+// Render telemetri real-time (setiap 3 detik)
+function renderLiveTelemetry() {
+  const { t, p, a } = S.cur;
+  const gas = S.gas;
+  const an = S.anomaly;
+  const lv = an.level;
+
+  const statusTags = ['NORMAL', 'WASPADA', 'KRITIS'];
+  const statusBadges = ['Optimal', 'Perhatian', 'Bahaya'];
+  const statusClasses = ['status-ok', 'status-warn', 'status-crit'];
+
+  // ── 1. DASHBOARD TELEMETRI ──
+  setDomText('cTemp', fmt(t, 0));
+  setDomText('cKwh', fmt(S.meta.kwh, 1));
+  setDomText('dashCurPower', fmt(S.kw, 2) + ' kW');
+  setDomText('qsPressure', fmt(p, 1));
+  setDomText('qsAirflow', fmt(a, 1));
+  setDomText('qsPower', fmt(S.kw, 2));
+
+  // Temp status badge
+  const tempTag = $('#cTempTag');
+  if (tempTag) {
+    if (t < 700) {
+      tempTag.textContent = 'Rendah (<700°C)';
+      tempTag.style.color = '#2980B9';
+      tempTag.style.background = '#EBF5FB';
+    } else if (t > 900) {
+      tempTag.textContent = 'Tinggi (>900°C)';
+      tempTag.style.color = '#E74C3C';
+      tempTag.style.background = '#FDF2F1';
     } else {
-      da.classList.add('hidden');
+      tempTag.textContent = 'Normal (700-900)';
+      tempTag.style.color = '#27AE60';
+      tempTag.style.background = '#EAFAF1';
     }
   }
 
-  /* ── Monitoring ── */
-  const tempNum = Math.round(c.t);
-  setText('mTemp',    String(tempNum));
-  setText('mPressure', fmt(c.p, 1));
-  setText('mAirflow',  fmt(c.a, 1));
-  setText('mPower',    fmt(S.kw, 2));
+  // Dashboard Status Banner
+  const statusBanner = $('#dashStatusBanner');
+  if (statusBanner) {
+    statusBanner.className = `status-banner ${statusClasses[lv]}`;
+    setDomText('dashStatusBadge', statusTags[lv]);
 
-  // Temperature number color
-  const tn = $('#mTemp');
-  if (tn) {
-    tn.className = 'temp-num mono' + (c.t < 700 ? ' cold' : c.t > 900 ? ' hot' : '');
+    const descTexts = [
+      'Reaksi termokimia stabil pada rentang target 700°C – 900°C. Aliran syngas optimal.',
+      'Penyimpangan parameter terdeteksi. Sistem menyarankan penyesuaian operasional katup.',
+      'Kondisi kritis! Segera tindak lanjuti rekomendasi AI untuk mencegah kegagalan reaktor.'
+    ];
+    setDomText('dashStatusDesc', descTexts[lv]);
   }
 
-  // Gauge cursor (500–1000 → 0–100%)
-  const pct = clamp((c.t - 500) / 500 * 100, 0, 100);
-  const cur = $('#tempCursor');
-  if (cur) cur.style.left = pct + '%';
-
-  // Status badge
-  const mb = $('#monBadge');
-  if (mb) { mb.textContent = txt; mb.className = `tp-badge ${cls}`; }
-
-  // Temp panel background
-  const tp = $('#tempPanel');
-  if (tp) {
-    if (lv === 2)      tp.style.background = '#1c0a0a';
-    else if (lv === 1) tp.style.background = '#1a1308';
-    else               tp.style.background = '#0f1f17';
+  // Dashboard Anomaly Alert Box
+  const dashAnomaly = $('#dashAnomalyBox');
+  if (dashAnomaly) {
+    if (lv > 0) {
+      dashAnomaly.classList.remove('hidden');
+      dashAnomaly.className = `anomaly-card ${lv === 2 ? 'anomaly-crit' : ''}`;
+      setDomText('dashAnomalyText', an.items[0]);
+      setDomText('dashAnomalyConf', an.confidence + '% Akurasi');
+    } else {
+      dashAnomaly.classList.add('hidden');
+    }
   }
 
-  // Syngas
-  setText('gCO',  fmt(g.CO, 1)  + '%');
-  setText('gH2',  fmt(g.H2, 1)  + '%');
-  setText('gCH4', fmt(g.CH4, 1) + '%');
-  setText('gCO2', fmt(g.CO2, 1) + '%');
-  setBar('barCO',  g.CO,  35);
-  setBar('barH2',  g.H2,  28);
-  setBar('barCH4', g.CH4, 9);
-  setBar('barCO2', g.CO2, 22);
+  // ── 2. MONITORING TAB ──
+  setDomText('mTemp', fmt(t, 0));
+  setDomText('gdThroatTemp', fmt(t, 0) + ' °C');
+  setDomText('mPressure', fmt(p, 1));
+  setDomText('mAirflow', fmt(a, 1));
+  setDomText('mPower', fmt(S.kw, 2));
 
-  // AI alert panel
-  const ab = $('#anomalyBox');
-  if (ab) {
-    ab.classList.remove('hidden', 'ok', 'warn', 'crit');
-    ab.classList.add(cls);
-    setText('aiConf', an.items[0].conf + '%');
-    const ai = $('#anomalyItems');
-    if (ai) {
-      ai.innerHTML = an.items.map(it =>
-        `<div class="ai-item">${it.text}</div>`
+  // Temperature color class
+  const tempDigits = $('#mTemp');
+  if (tempDigits) {
+    tempDigits.className = 'ic-digits mono ' + (t < 700 ? 'state-cold' : (t > 900 ? 'state-hot' : ''));
+  }
+
+  // Status badge on dark instrument dial
+  const monBadge = $('#monStatusBadge');
+  if (monBadge) {
+    monBadge.textContent = statusTags[lv];
+    monBadge.className = `ic-status-badge ${lv === 2 ? 'badge-critical' : (lv === 1 ? 'badge-warning' : 'badge-normal')}`;
+  }
+
+  // Temperature gauge marker position: 500°C - 1000°C (range 500)
+  const marker = $('#tempGaugeMarker');
+  if (marker) {
+    const pct = clamp((t - 500) / 500 * 100, 0, 100);
+    marker.style.left = pct + '%';
+  }
+
+  // Sensor notes
+  setDomText('mPressureNote', p < 95 ? 'Tekanan Rendah!' : 'Stabil (100–105)');
+  setDomText('mAirflowNote', a < 32 ? 'Rasio Udara Rendah!' : (a > 50 ? 'Aliran Tinggi' : 'Rasio Normal'));
+
+  // Gas Chromatography readings
+  setDomText('gCO',  fmt(gas.CO, 1)  + '%');
+  setDomText('gH2',  fmt(gas.H2, 1)  + '%');
+  setDomText('gCH4', fmt(gas.CH4, 1) + '%');
+  setDomText('gCO2', fmt(gas.CO2, 1) + '%');
+
+  setDomWidth('barCO',  (gas.CO / 36) * 100);
+  setDomWidth('barH2',  (gas.H2 / 30) * 100);
+  setDomWidth('barCH4', (gas.CH4 / 10) * 100);
+  setDomWidth('barCO2', (gas.CO2 / 25) * 100);
+
+  const lhv = 0.1263 * gas.CO + 0.1078 * gas.H2 + 0.3589 * gas.CH4;
+  setDomText('lhvBadge', `LHV: ${fmt(lhv, 2)} MJ/Nm³`);
+
+  // Anomaly Diagnostics Box
+  const monAnomaly = $('#monAnomalyBox');
+  if (monAnomaly) {
+    const diagClasses = ['state-normal', 'state-warning', 'state-critical'];
+    monAnomaly.className = `anomaly-diag-box ${diagClasses[lv]}`;
+    setDomText('monConfVal', `Keyakinan AI ${an.confidence}%`);
+
+    const itemsContainer = $('#monAnomalyItems');
+    if (itemsContainer) {
+      itemsContainer.innerHTML = an.items.map(itemText =>
+        `<div class="adb-item">• ${itemText}</div>`
       ).join('');
     }
   }
 
-  // Monitor tick counter
-  setText('monTick', `${S.mon.t.length} titik`);
-
-  // Update charts if visible
-  if (S.screen === 'monitoring') updateMonitorChart();
+  // Update chart jika di tab monitoring
+  if (S.activeScreen === 'monitoring') {
+    updateMonitorChart();
+  }
 }
 
-function setBar(id, val, max) {
-  const el = document.getElementById(id);
-  if (el) el.style.width = clamp(val / max * 100, 0, 100) + '%';
-}
-
-/* ══════════════════════════════════════════
-   RENDER — LOGS
-══════════════════════════════════════════ */
-function renderLog() {
+// Render daftar log aktivitas terbaru
+function renderLogStream() {
   const list = $('#logList');
   if (!list) return;
-  const shown = S.logs.slice(0, 5);
-  if (!shown.length) {
-    list.innerHTML = '<li class="log-item"><span class="log-text" style="color:var(--tx-3)">Belum ada aktivitas</span></li>';
+
+  const logsToShow = S.logs.slice(0, 5);
+  if (logsToShow.length === 0) {
+    list.innerHTML = `<li class="log-entry"><span class="log-text" style="color:var(--tx-faint)">Belum ada log aktivitas tercatat.</span></li>`;
     return;
   }
-  list.innerHTML = shown.map(l => `
-    <li class="log-item ${l.lvl}">
+
+  list.innerHTML = logsToShow.map(l => `
+    <li class="log-entry ${l.lvl}">
       <span class="log-text">${l.text}</span>
-      <span class="log-time">${tsShort(l.ts)}</span>
+      <span class="log-time mono">${fmtDateTime(l.ts)}</span>
     </li>
   `).join('');
-  setText('logCount', String(S.logs.length));
+
+  setDomText('logCountPill', `${S.logs.length} Catatan`);
 }
 
-/* ══════════════════════════════════════════
-   RENDER — BIOMASS
-══════════════════════════════════════════ */
-function renderBiomass() {
-  const q = S.q.toLowerCase();
-  const f = S.filter;
-  const items = S.biomass.filter(b => {
-    if (f && b.type !== f) return false;
-    if (q && !b.type.toLowerCase().includes(q) && !b.date.includes(q)) return false;
+// Render data biomassa di Screen 2
+function renderBiomassScreen() {
+  const q = S.searchQuery.toLowerCase().trim();
+  const filter = S.filterType;
+
+  // Filter berdasarkan jenis dan teks pencarian (jenis atau tanggal)
+  const filtered = S.biomass.filter(item => {
+    if (filter && item.type !== filter) return false;
+    if (q) {
+      const matchType = item.type.toLowerCase().includes(q);
+      const matchDate = item.date.includes(q);
+      const matchWeight = String(item.weight).includes(q);
+      if (!matchType && !matchDate && !matchWeight) return false;
+    }
     return true;
   });
 
-  const total = items.reduce((a, b) => a + b.weight, 0);
-  setText('bTotal', total.toLocaleString('id-ID') + ' kg');
-  setText('cBiomass', S.biomass.reduce((a, b) => a + b.weight, 0).toLocaleString('id-ID'));
+  const totalFilteredWeight = filtered.reduce((acc, cur) => acc + Number(cur.weight), 0);
+  const totalAllWeight = S.biomass.reduce((acc, cur) => acc + Number(cur.weight), 0);
 
-  const list  = $('#bList');
-  const empty = $('#bEmpty');
-  if (!list) return;
+  setDomText('biomassTotalVal', `${totalFilteredWeight.toLocaleString('id-ID')} kg`);
+  setDomText('cBiomass', totalAllWeight.toLocaleString('id-ID'));
 
-  if (!items.length) {
-    list.innerHTML = '';
-    empty?.classList.remove('hidden');
+  const listEl = $('#biomassList');
+  const emptyEl = $('#biomassEmptyState');
+  if (!listEl) return;
+
+  if (filtered.length === 0) {
+    listEl.innerHTML = '';
+    emptyEl?.classList.remove('hidden');
     return;
   }
-  empty?.classList.add('hidden');
+  emptyEl?.classList.add('hidden');
 
-  list.innerHTML = items.map(b => {
-    const m = TYPE_MARK[b.type] || { abbr: b.type.slice(0, 2).toUpperCase(), cls: 'bm-default' };
+  listEl.innerHTML = filtered.map(item => {
+    const badgeInfo = BIOMASS_BADGES[item.type] || { cls: 'badge-kayu', abbr: 'BIO' };
+    const isHighMoisture = Number(item.moisture) > 15;
+
     return `
-      <div class="biomass-card">
-        <div class="bc-type-mark ${m.cls}">${m.abbr}</div>
-        <div class="bc-body">
-          <div class="bc-type">${b.type}</div>
-          <div class="bc-tags">
-            <span class="bc-tag">${b.weight} kg</span>
-            <span class="bc-tag">Air: ${b.moisture}%</span>
+      <div class="biomass-card-item">
+        <div class="bci-badge ${badgeInfo.cls}">${badgeInfo.abbr}</div>
+        <div class="bci-content">
+          <div class="bci-title">${item.type}</div>
+          <div class="bci-meta-tags">
+            <span class="bci-tag mono">${item.weight} kg</span>
+            <span class="bci-tag mono ${isHighMoisture ? 'tag-moisture-warn' : ''}">
+              Air: ${item.moisture}%${isHighMoisture ? ' ⚠️' : ''}
+            </span>
           </div>
-          <div class="bc-date">${dtShort(b.date)}</div>
+          <div class="bci-date">Pencatatan: ${fmtDate(item.date)}</div>
         </div>
-        <div class="bc-actions">
-          <button class="bc-btn" data-action="edit" data-id="${b.id}" title="Edit" aria-label="Edit ${b.type}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        <div class="bci-actions">
+          <button class="bci-btn" data-action="edit-biomass" data-id="${item.id}" title="Edit Catatan" aria-label="Edit ${item.type}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </button>
-          <button class="bc-btn bc-del" data-action="delete" data-id="${b.id}" title="Hapus" aria-label="Hapus ${b.type}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+          <button class="bci-btn bci-btn-del" data-action="delete-biomass" data-id="${item.id}" title="Hapus Catatan" aria-label="Hapus ${item.type}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
           </button>
         </div>
       </div>
@@ -619,468 +872,812 @@ function renderBiomass() {
   }).join('');
 }
 
-function renderChips() {
-  const wrap = $('#chips');
-  if (!wrap) return;
-  wrap.innerHTML = CHIPS.map(c => `
-    <button class="chip${S.filter === c.value ? ' active' : ''}" data-action="filter" data-value="${c.value}">
+// Render chip filter biomassa (Semua, Sekam, Jerami, Tongkol, Kayu)
+function renderFilterChips() {
+  const container = $('#filterChipsContainer');
+  if (!container) return;
+
+  container.innerHTML = CHIP_FILTERS.map(c => `
+    <button class="filter-chip-btn ${S.filterType === c.value ? 'active' : ''}"
+      data-action="filter-chip" data-value="${c.value}">
       ${c.label}
     </button>
   `).join('');
 }
 
-/* ══════════════════════════════════════════
-   RENDER — SYNC SCREEN
-══════════════════════════════════════════ */
-function renderSync() {
-  // Status card
-  const sc = $('#syncStatusCard');
-  if (sc) sc.className = `sync-status-card${S.online ? ' is-online' : ''}`;
-  setText('syncStatusTitle', S.online ? 'Terhubung ke Internet' : 'Tidak Terhubung');
-  setText('syncStatusSub',   S.online ? 'Siap melakukan sinkronisasi' : 'Mode offline — data tersimpan lokal');
+// Render panel simulasi skenario (Monitoring tab)
+function renderSimulationGrid() {
+  const container = $('#simPillGrid');
+  if (!container) return;
 
-  const orb = $('#syncOrb');
-  if (orb) orb.className = `ssc-orb${S.online ? ' ssc-online' : ''}`;
+  container.innerHTML = Object.entries(SIM_MODES).map(([key, item]) => `
+    <button class="sim-btn-pill ${item.cls} ${S.mode === key ? 'active' : ''}"
+      data-action="set-sim-mode" data-mode="${key}">
+      ${item.label}
+    </button>
+  `).join('');
+}
 
-  // Last sync
-  setText('lastSyncTime', S.meta.lastSync ? tsShort(S.meta.lastSync) : 'Belum pernah');
+// Render layar prediksi output listrik AI
+function renderPredictionScreen() {
+  if (S.charts.pred) {
+    updatePredictionChart();
+  } else {
+    buildPredictionChart();
+  }
 
-  // Queue
-  const ql = $('#queueList');
-  const qe = $('#queueEmpty');
-  if (ql) {
-    if (S.queue.length) {
-      qe?.classList.add('hidden');
-      ql.innerHTML = S.queue.slice(-8).reverse().map(q => `
-        <div class="queue-item">
-          <span class="qi-type">${q.type}</span>
-          <span class="qi-desc">${q.desc}</span>
-          <span class="qi-time mono">${tsShort(q.ts)}</span>
+  // Indikator akurasi R²
+  const r2Val = (S.isOptimized ? 0.96 : 0.94);
+  setDomText('r2AccuracyVal', r2Val.toFixed(2));
+
+  // Tabel rincian per jam
+  const tbody = $('#predTableBody');
+  if (!tbody || S.predictions.length !== 6) return;
+
+  const maxVal = Math.max(...S.predictions);
+  const peakIdx = S.predictions.indexOf(maxVal);
+
+  let cumulativeKwh = 0;
+  tbody.innerHTML = S.predictions.map((pKw, i) => {
+    cumulativeKwh += pKw;
+    const isPeak = (i === peakIdx);
+    return `
+      <tr>
+        <td class="mono">+${i + 1} Jam</td>
+        <td class="mono"><b>${pKw} kW</b></td>
+        <td class="mono">${fmt(cumulativeKwh, 2)} kWh</td>
+        <td>
+          <span class="${isPeak ? 'status-pill-peak' : 'status-pill-normal'}">
+            ${isPeak ? 'Puncak Maksimal' : 'Stabil Optimal'}
+          </span>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  // Rekomendasi AI dinamis
+  const recText = $('#predRecommendationText');
+  if (recText) {
+    recText.textContent = `Produksi listrik optimal dalam ${peakIdx + 1} jam (${maxVal} kW). Disarankan menjaga laju pengumpanan biomassa tetap konstan 25 kg/jam pada zona pembakaran.`;
+  }
+}
+
+// Render layar sinkronisasi data & antrean offline
+function renderSyncScreen() {
+  // 1. Status kartu konektivitas
+  const heroCard = $('#syncHeroCard');
+  if (heroCard) {
+    heroCard.className = `sync-hero-card ${S.isOnline ? 'online-state' : ''}`;
+  }
+
+  setDomText('shcStatusTitle', S.isOnline ? 'Terhubung ke Internet' : 'Mode Offline Aktif');
+  setDomText('shcStatusDesc', S.isOnline
+    ? 'Koneksi data aktif. Transmisi telemetri akan menggunakan jalur langsung Internet Cloud Gateway.'
+    : 'Tidak ada sinyal internet. Data tersimpan lokal di IndexedDB dan siap dikirim via fallback SMS atau LoRa.');
+
+  // Update icon connectivity
+  const iconWrap = $('#shcIconWrap');
+  if (iconWrap) {
+    iconWrap.innerHTML = S.isOnline
+      ? `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 0 20M12 2a15.3 15.3 0 0 0 0 20"/></svg>`
+      : `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>`;
+  }
+
+  // Waktu sinkron terakhir
+  setDomText('lastSyncTimeText', S.meta.lastSync ? fmtDateTime(S.meta.lastSync) : 'Belum Pernah');
+
+  // 2. Daftar antrean data
+  const queueContainer = $('#queueItemsList');
+  const queueEmpty = $('#queueEmptyState');
+  if (queueContainer) {
+    if (S.queue.length > 0) {
+      queueEmpty?.classList.add('hidden');
+      queueContainer.innerHTML = S.queue.slice(-8).reverse().map(q => `
+        <div class="queue-entry">
+          <span class="qe-badge">${q.type}</span>
+          <span class="qe-desc">${q.desc}</span>
+          <span class="qe-time mono">${fmtDateTime(q.ts)}</span>
         </div>
       `).join('');
     } else {
-      ql.innerHTML = '';
-      qe?.classList.remove('hidden');
+      queueContainer.innerHTML = '';
+      queueEmpty?.classList.remove('hidden');
     }
   }
 
-  // Methods
-  const ml = $('#methodList');
-  if (ml) {
-    ml.innerHTML = Object.entries(METHODS).map(([key, m]) => `
-      <div class="method-card${S.method === key ? ' is-selected' : ''}" data-action="method" data-value="${key}">
-        <div class="mc-icon">${m.icon}</div>
-        <div class="mc-body">
-          <div class="mc-name">${m.name}</div>
-          <div class="mc-desc">${m.desc}</div>
+  // 3. Pilihan metode sinkronisasi
+  const methodsContainer = $('#syncMethodsContainer');
+  if (methodsContainer) {
+    methodsContainer.innerHTML = Object.entries(SYNC_METHODS).map(([key, method]) => `
+      <div class="smo-card ${S.selectedMethod === key ? 'is-selected' : ''}"
+        data-action="select-sync-method" data-method="${key}">
+        <div class="smo-icon">${method.iconSvg}</div>
+        <div class="smo-body">
+          <div class="smo-title">${method.name}</div>
+          <div class="smo-desc">${method.desc}</div>
         </div>
-        <div class="mc-speed mono">${m.speed}</div>
-        <div class="mc-radio"></div>
+        <div class="smo-speed mono">${method.speed}</div>
+        <div class="smo-radio"></div>
       </div>
     `).join('');
   }
 
-  renderNavBadge();
-  renderSyncLog();
+  updateQueueBadges();
+  renderSyncLogStream();
 }
 
-function renderSyncLog() {
-  const sl = $('#syncLog');
-  if (!sl) return;
-  if (!S.syncLogs.length) {
-    sl.innerHTML = '<div class="slog-item" style="color:var(--tx-3)">Belum ada riwayat sinkronisasi</div>';
+// Update log transmisi sinkronisasi
+function renderSyncLogStream() {
+  const container = $('#syncLogContainer');
+  if (!container) return;
+
+  if (S.syncLogs.length === 0) {
+    container.innerHTML = `<div class="slog-row" style="color:var(--tx-faint)">Belum ada riwayat transmisi data.</div>`;
     return;
   }
-  sl.innerHTML = S.syncLogs.slice(-8).reverse().map(l => `
-    <div class="slog-item">
+
+  container.innerHTML = S.syncLogs.slice(-6).reverse().map(l => `
+    <div class="slog-row">
       <span class="slog-dot ${l.ok ? 'ok' : 'fail'}"></span>
-      <span>${l.msg}</span>
-      <span class="slog-time mono">${tsShort(l.ts)}</span>
+      <span class="slog-text">${l.msg}</span>
+      <span class="slog-time mono">${fmtDateTime(l.ts)}</span>
     </div>
   `).join('');
 }
 
-function renderNavBadge() {
-  const nb = $('#navBadge');
-  const qc = $('#queueCount');
-  if (nb) {
-    if (S.queue.length) { nb.textContent = S.queue.length > 99 ? '99+' : S.queue.length; nb.classList.remove('hidden'); }
-    else                { nb.classList.add('hidden'); }
+// Update lencana antrean di navbar dan header
+function updateQueueBadges() {
+  const count = S.queue.length;
+  const navBadge = $('#navQueueBadge');
+  const queueCountBadge = $('#queueCountBadge');
+
+  if (navBadge) {
+    if (count > 0) {
+      navBadge.textContent = count > 99 ? '99+' : count;
+      navBadge.classList.remove('hidden');
+    } else {
+      navBadge.classList.add('hidden');
+    }
   }
-  if (qc) qc.textContent = String(S.queue.length);
-}
 
-function renderNetBadge() {
-  const badge = $('#netBadge');
-  const label = $('#netLabel');
-  const dot   = $('#netDot');
-  if (badge) badge.className = `net-badge ${S.online ? 'net-online' : 'net-offline'}`;
-  if (label) label.textContent = S.online ? 'Online' : 'Offline';
-}
-
-/* ══════════════════════════════════════════
-   RENDER — PREDIKSI
-══════════════════════════════════════════ */
-function renderPred() {
-  if (S.charts.pred) updatePredChart();
-  else makePredChart();
-
-  const r2 = (S.opt ? 0.94 + Math.random() * .03 : 0.88 + Math.random() * .04).toFixed(2);
-  setText('r2Val', r2);
-
-  const tbody = $('#predBody');
-  if (!tbody || !S.pred.length) return;
-
-  const peakIdx = S.pred.indexOf(Math.max(...S.pred));
-  tbody.innerHTML = S.pred.map((v, i) => `
-    <tr>
-      <td>+${i + 1} jam</td>
-      <td class="mono"><strong>${v} kW</strong></td>
-      <td><span class="pred-tag ${i === peakIdx ? 'peak' : 'normal'}">${i === peakIdx ? 'Puncak' : 'Normal'}</span></td>
-    </tr>
-  `).join('');
-
-  const peakH = peakIdx + 1;
-  setText('predMsg', `Produksi optimal dalam ${peakH} jam ke depan — estimasi puncak ${S.pred[peakIdx]} kW`);
-}
-
-/* ══════════════════════════════════════════
-   RENDER — SIMULATION GRID
-══════════════════════════════════════════ */
-function renderSimGrid() {
-  const grid = $('#simGrid');
-  if (!grid) return;
-  grid.innerHTML = Object.entries(MODES).map(([key, m]) => `
-    <button class="sim-btn ${m.cls}${S.mode === key ? ' sim-active' : ''}"
-      data-action="mode" data-value="${key}">${m.label}</button>
-  `).join('');
-}
-
-/* ══════════════════════════════════════════
-   NAVIGATION
-══════════════════════════════════════════ */
-function navigate(screen) {
-  S.screen = screen;
-  $$('.screen').forEach(s => s.classList.remove('active'));
-  $$('.nav-btn').forEach(b => b.classList.remove('active'));
-  $(`#s-${screen}`)?.classList.add('active');
-  $(`[data-screen="${screen}"]`)?.classList.add('active');
-  $('#main')?.scrollTo(0, 0);
-
-  switch (screen) {
-    case 'dashboard':
-      renderLog();
-      break;
-    case 'biomassa':
-      renderChips();
-      renderBiomass();
-      break;
-    case 'monitoring':
-      setTimeout(() => S.charts.mon ? updateMonitorChart() : makeMonitorChart(), 60);
-      renderSimGrid();
-      break;
-    case 'prediksi':
-      computePred();
-      setTimeout(() => makePredChart(), 60);
-      break;
-    case 'sinkronisasi':
-      renderSync();
-      break;
+  if (queueCountBadge) {
+    queueCountBadge.textContent = `${count} Data Tertunda`;
   }
 }
 
-/* ══════════════════════════════════════════
-   BIOMASS CRUD
-══════════════════════════════════════════ */
-function openAdd() {
-  S.editId = null;
-  setText('modalTitle', 'Tambah Biomassa');
-  $('#editId').value    = '';
-  $('#fType').value     = '';
-  $('#fWeight').value   = '';
-  $('#fMoisture').value = '';
-  $('#fDate').value     = today();
-  openModal();
+// Update pill koneksi jaringan di topbar
+function updateNetworkBadge() {
+  const pillBtn = $('#netPillBtn');
+  const pillText = $('#netPillText');
+  if (!pillBtn || !pillText) return;
+
+  if (S.isOnline) {
+    pillBtn.className = 'net-pill net-online';
+    pillText.textContent = 'Online';
+  } else {
+    pillBtn.className = 'net-pill net-offline';
+    pillText.textContent = 'Offline';
+  }
 }
 
-function openEdit(id) {
-  const b = S.biomass.find(x => x.id === id);
-  if (!b) return;
-  S.editId = id;
-  setText('modalTitle', 'Edit Biomassa');
-  $('#editId').value    = id;
-  $('#fType').value     = b.type;
-  $('#fWeight').value   = b.weight;
-  $('#fMoisture').value = b.moisture;
-  $('#fDate').value     = b.date;
-  openModal();
-}
-
-function openModal() {
-  $('#modalOverlay')?.classList.remove('hidden');
-  document.body.style.overflow = 'hidden';
-  setTimeout(() => $('#fType')?.focus(), 120);
-}
-
-function closeModal() {
-  $('#modalOverlay')?.classList.add('hidden');
-  document.body.style.overflow = '';
-}
-
-function saveBiomass(e) {
-  e.preventDefault();
-  const type     = $('#fType').value.trim();
-  const weight   = parseFloat($('#fWeight').value);
-  const moisture = parseFloat($('#fMoisture').value);
-  const date     = $('#fDate').value;
-
-  if (!type || isNaN(weight) || weight <= 0 || isNaN(moisture) || moisture < 0 || !date) {
-    toast('Isi semua kolom dengan benar');
+/* ════════════════════════════════════════════════════════════════
+   11. SISTEM SINKRONISASI 3-LAYER FALLBACK (DEMO SIMULASI)
+   ════════════════════════════════════════════════════════════════ */
+async function triggerSyncProcess() {
+  if (S.isSyncing) return;
+  if (S.queue.length === 0) {
+    showToast('Semua data sudah tersinkronisasi. Antrean kosong.');
     return;
   }
 
-  if (S.editId) {
-    const idx = S.biomass.findIndex(b => b.id === S.editId);
-    if (idx !== -1) {
-      S.biomass[idx] = { ...S.biomass[idx], type, weight, moisture, date };
-      addLog(`Data diperbarui: ${type} ${weight} kg`, 'ok');
-      enqueue('update', `Update: ${type} ${weight} kg`);
-      toast('Data biomassa berhasil diperbarui');
-    }
-  } else {
-    S.biomass.unshift({ id: uid(), type, weight, moisture, date });
-    addLog(`Biomassa ditambah: ${type} ${weight} kg (air ${moisture}%)`, 'ok');
-    enqueue('tambah', `Tambah: ${type} ${weight} kg`);
-    toast('Biomassa berhasil ditambahkan');
-  }
-
-  closeModal();
-  renderBiomass();
-  save();
-}
-
-function askDelete(id) {
-  S.deleteId = id;
-  $('#confirmOverlay')?.classList.remove('hidden');
-}
-
-function closeConfirm() {
-  S.deleteId = null;
-  $('#confirmOverlay')?.classList.add('hidden');
-}
-
-function confirmDelete() {
-  if (!S.deleteId) return;
-  const b = S.biomass.find(x => x.id === S.deleteId);
-  S.biomass = S.biomass.filter(x => x.id !== S.deleteId);
-  if (b) {
-    addLog(`Biomassa dihapus: ${b.type} ${b.weight} kg`, 'ok');
-    enqueue('hapus', `Hapus: ${b.type}`);
-    toast('Data berhasil dihapus');
-  }
-  closeConfirm();
-  renderBiomass();
-  save();
-}
-
-/* ══════════════════════════════════════════
-   SYNC
-══════════════════════════════════════════ */
-async function doSync() {
-  if (S.syncing) return;
-  if (!S.queue.length) { toast('Tidak ada data yang perlu disinkronkan'); return; }
-
-  S.syncing = true;
-  const btn = $('#syncBtn');
-  btn?.classList.add('is-syncing');
+  S.isSyncing = true;
+  const btn = $('#btnTriggerSync');
+  const btnLabel = $('#btnSyncLabel');
+  btn?.classList.add('is-spinning');
   btn?.setAttribute('disabled', '');
-  setText('syncBtnLabel', 'Menyinkronkan…');
+  if (btnLabel) btnLabel.textContent = 'Menjalankan Protokol Transmisi...';
 
-  const m     = METHODS[S.method];
   const count = S.queue.length;
-  toast(`Mengirim ${count} data via ${m.name}…`);
 
-  await new Promise(r => setTimeout(r, m.ms));
+  // Elemen indikator 3-layer stepper
+  const step1 = $('#stepInternet');
+  const badge1 = $('#badgeInternet');
+  const step2 = $('#stepSms');
+  const badge2 = $('#badgeSms');
+  const step3 = $('#stepLora');
+  const badge3 = $('#badgeLora');
 
-  const ok = Math.random() > .07;
+  const resetStepper = () => {
+    [step1, step2, step3].forEach(el => el?.classList.remove('is-active-step', 'is-success-step', 'is-fail-step'));
+    if (badge1) badge1.textContent = 'Siaga';
+    if (badge2) badge2.textContent = 'Siaga';
+    if (badge3) badge3.textContent = 'Siaga';
+  };
 
-  if (ok) {
-    S.syncLogs.push({ ts: Date.now(), ok: true, msg: `${count} data tersinkron via ${m.name}` });
+  resetStepper();
+
+  let finalMethodName = '';
+  let syncSuccess = false;
+
+  // JALUR 1: Jika memilih Internet Langsung
+  if (S.selectedMethod === 'internet') {
+    step1?.classList.add('is-active-step');
+    if (badge1) badge1.textContent = 'Mengirim...';
+    await sleep(1000);
+
+    if (S.isOnline) {
+      step1?.classList.remove('is-active-step');
+      step1?.classList.add('is-success-step');
+      if (badge1) badge1.textContent = 'Sukses';
+      finalMethodName = 'Internet Cloud Gateway';
+      syncSuccess = true;
+    } else {
+      step1?.classList.remove('is-active-step');
+      step1?.classList.add('is-fail-step');
+      if (badge1) badge1.textContent = 'Gagal (Offline)';
+      finalMethodName = 'Internet Gateway (Gagal - Offline)';
+      syncSuccess = false;
+    }
+  }
+  // JALUR 2: Jika memilih SMS Langsung
+  else if (S.selectedMethod === 'sms') {
+    step2?.classList.add('is-active-step');
+    if (badge2) badge2.textContent = 'Mengirim SMS...';
+    await sleep(2200);
+    step2?.classList.remove('is-active-step');
+    step2?.classList.add('is-success-step');
+    if (badge2) badge2.textContent = 'Terkirim';
+    finalMethodName = 'SMS Modem GSM (SIM800L)';
+    syncSuccess = true;
+  }
+  // JALUR 3: Jika memilih LoRa Langsung
+  else if (S.selectedMethod === 'lora') {
+    step3?.classList.add('is-active-step');
+    if (badge3) badge3.textContent = 'Transmisi Radio...';
+    await sleep(2500);
+    step3?.classList.remove('is-active-step');
+    step3?.classList.add('is-success-step');
+    if (badge3) badge3.textContent = 'Terkirim';
+    finalMethodName = 'LoRa Radio 915 MHz (SX1276)';
+    syncSuccess = true;
+  }
+  // JALUR 4: PROTOKOL 3-LAYER FALLBACK OTOMATIS
+  else {
+    // ── LAPISAN 1: COBA INTERNET ──
+    step1?.classList.add('is-active-step');
+    if (badge1) badge1.textContent = 'Menguji Internet...';
+    await sleep(900);
+
+    if (S.isOnline) {
+      step1?.classList.remove('is-active-step');
+      step1?.classList.add('is-success-step');
+      if (badge1) badge1.textContent = 'Sukses';
+      finalMethodName = 'Layer 1: Internet Gateway';
+      syncSuccess = true;
+    } else {
+      // Internet Gagal -> Fallback ke Lapisan 2
+      step1?.classList.remove('is-active-step');
+      step1?.classList.add('is-fail-step');
+      if (badge1) badge1.textContent = 'Gagal (No Data)';
+      showToast('Layer 1 (Internet) Gagal. Beralih ke Layer 2 (SMS GSM)...', 1800);
+
+      // ── LAPISAN 2: COBA SMS GSM ──
+      step2?.classList.add('is-active-step');
+      if (badge2) badge2.textContent = 'Menguji Sinyal GSM...';
+      await sleep(1400);
+
+      // Simulasi kondisi desa terpencil (sinyal GSM lemah/nihil)
+      const gsmAvailable = false;
+
+      if (gsmAvailable) {
+        step2?.classList.remove('is-active-step');
+        step2?.classList.add('is-success-step');
+        if (badge2) badge2.textContent = 'Terkirim';
+        finalMethodName = 'Layer 2: SMS Gateway GSM';
+        syncSuccess = true;
+      } else {
+        // SMS Gagal -> Fallback ke Lapisan 3 (LoRa)
+        step2?.classList.remove('is-active-step');
+        step2?.classList.add('is-fail-step');
+        if (badge2) badge2.textContent = 'Gagal (No Sinyal)';
+        showToast('Layer 2 (SMS) Gagal. Beralih ke Layer 3: LoRa Mesh 915 MHz...', 2000);
+
+        // ── LAPISAN 3: TRANSMISI LORA RADIO KE GATEWAY DESA ──
+        step3?.classList.add('is-active-step');
+        if (badge3) badge3.textContent = 'Transceiver Aktif...';
+        await sleep(2200);
+
+        step3?.classList.remove('is-active-step');
+        step3?.classList.add('is-success-step');
+        if (badge3) badge3.textContent = 'Sukses Terkirim';
+        finalMethodName = 'Layer 3: LoRa Radio Transceiver (915 MHz)';
+        syncSuccess = true;
+      }
+    }
+  }
+
+  // Proses hasil sinkronisasi
+  if (syncSuccess) {
+    S.syncLogs.push({
+      ts: Date.now(),
+      ok: true,
+      msg: `${count} paket data berhasil dikirim via ${finalMethodName}`
+    });
     S.meta.lastSync = Date.now();
     S.queue = [];
-    addLog(`Sinkronisasi berhasil — ${count} data via ${m.name}`, 'ok');
-    toast(`${count} data berhasil dikirim via ${m.name}`);
+    addLog(`Sinkronisasi sukses: ${count} data terkirim via ${finalMethodName}`, 'ok');
+    showToast(`Sukses! ${count} data terkirim via ${finalMethodName}`);
   } else {
-    S.syncLogs.push({ ts: Date.now(), ok: false, msg: `Gagal sinkron via ${m.name}: koneksi timeout` });
-    addLog('Sinkronisasi gagal — coba lagi', 'warn');
-    toast('Sinkronisasi gagal. Coba lagi.');
+    S.syncLogs.push({
+      ts: Date.now(),
+      ok: false,
+      msg: `Gagal mengirim data via ${finalMethodName}`
+    });
+    addLog(`Sinkronisasi gagal via ${finalMethodName}`, 'warn');
+    showToast('Sinkronisasi gagal. Pastikan modul transceiver terhubung.');
   }
 
-  if (S.syncLogs.length > 20) S.syncLogs = S.syncLogs.slice(-20);
+  if (S.syncLogs.length > 25) S.syncLogs = S.syncLogs.slice(-25);
 
-  S.syncing = false;
-  btn?.classList.remove('is-syncing');
+  S.isSyncing = false;
+  btn?.classList.remove('is-spinning');
   btn?.removeAttribute('disabled');
-  setText('syncBtnLabel', 'Sinkronisasi Sekarang');
+  if (btnLabel) btnLabel.textContent = 'Sinkronisasi Sekarang';
 
-  save();
-  renderSync();
+  persistState();
+  renderSyncScreen();
 }
 
-/* ══════════════════════════════════════════
-   EXPORT CSV
-══════════════════════════════════════════ */
-function exportCSV() {
-  if (!S.biomass.length) { toast('Tidak ada data untuk diekspor'); return; }
-  const header = 'ID,Jenis,Berat (kg),Kadar Air (%),Tanggal\n';
-  const rows   = S.biomass.map(b => `${b.id},${b.type},${b.weight},${b.moisture},${b.date}`).join('\n');
-  const blob   = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
-  const url    = URL.createObjectURL(blob);
-  const a      = Object.assign(document.createElement('a'), { href: url, download: `sigap-biomassa-${today()}.csv` });
-  document.body.appendChild(a); a.click();
+/* ════════════════════════════════════════════════════════════════
+   12. CRUD DATA BIOMASSA (INPUT, EDIT, HAPUS)
+   ════════════════════════════════════════════════════════════════ */
+function openAddBiomassModal() {
+  S.activeEditId = null;
+  setDomText('modalFormTitle', 'Tambah Input Biomassa');
+  $('#formEditId').value = '';
+  $('#fBiomassType').value = '';
+  $('#fWeight').value = '';
+  $('#fMoisture').value = '';
+  $('#fDate').value = todayIso();
+  openModalBackdrop('#biomassModalOverlay');
+}
+
+function openEditBiomassModal(id) {
+  const item = S.biomass.find(b => b.id === id);
+  if (!item) return;
+
+  S.activeEditId = id;
+  setDomText('modalFormTitle', 'Edit Catatan Biomassa');
+  $('#formEditId').value = id;
+  $('#fBiomassType').value = item.type;
+  $('#fWeight').value = item.weight;
+  $('#fMoisture').value = item.moisture;
+  $('#fDate').value = item.date;
+  openModalBackdrop('#biomassModalOverlay');
+}
+
+function handleBiomassFormSubmit(e) {
+  e.preventDefault();
+
+  const type = $('#fBiomassType').value.trim();
+  const weight = parseFloat($('#fWeight').value);
+  const moisture = parseFloat($('#fMoisture').value);
+  const date = $('#fDate').value;
+
+  if (!type || isNaN(weight) || weight <= 0 || isNaN(moisture) || moisture <= 0 || !date) {
+    showToast('Lengkapi semua kolom formulir dengan data valid.');
+    return;
+  }
+
+  if (S.activeEditId) {
+    // Mode Update
+    const idx = S.biomass.findIndex(b => b.id === S.activeEditId);
+    if (idx !== -1) {
+      S.biomass[idx] = { ...S.biomass[idx], type, weight, moisture, date };
+      addLog(`Biomassa diperbarui: ${type} ${weight} kg (Kadar air ${moisture}%)`, 'ok');
+      enqueueSyncItem('update-biomassa', `Update biomassa: ${type} ${weight} kg`);
+      showToast('Data biomassa berhasil diperbarui.');
+    }
+  } else {
+    // Mode Tambah Baru
+    const newItem = { id: uid(), type, weight, moisture, date };
+    S.biomass.unshift(newItem);
+    addLog(`Biomassa ditambahkan: ${type} ${weight} kg (Kadar air ${moisture}%)`, 'ok');
+    enqueueSyncItem('tambah-biomassa', `Input baru: ${type} ${weight} kg`);
+    showToast('Pencatatan biomassa baru berhasil disimpan.');
+  }
+
+  closeModalBackdrop('#biomassModalOverlay');
+  renderBiomassScreen();
+  persistState();
+}
+
+function openDeleteConfirmDialog(id) {
+  S.pendingDeleteId = id;
+  openModalBackdrop('#confirmDeleteOverlay');
+}
+
+function executeDeleteBiomass() {
+  if (!S.pendingDeleteId) return;
+
+  const item = S.biomass.find(b => b.id === S.pendingDeleteId);
+  S.biomass = S.biomass.filter(b => b.id !== S.pendingDeleteId);
+
+  if (item) {
+    addLog(`Data biomassa dihapus: ${item.type} ${item.weight} kg`, 'ok');
+    enqueueSyncItem('hapus-biomassa', `Hapus biomassa: ${item.type}`);
+    showToast('Catatan biomassa berhasil dihapus.');
+  }
+
+  closeModalBackdrop('#confirmDeleteOverlay');
+  S.pendingDeleteId = null;
+  renderBiomassScreen();
+  persistState();
+}
+
+/* ════════════════════════════════════════════════════════════════
+   13. EXPORT DATA KE CSV (BIOMASSA & SENSOR)
+   ════════════════════════════════════════════════════════════════ */
+function exportBiomassToCsv() {
+  if (S.biomass.length === 0) {
+    showToast('Tidak ada data biomassa untuk diekspor.');
+    return;
+  }
+
+  const headers = 'ID,Jenis Biomassa,Berat (kg),Kadar Air (%),Tanggal Pencatatan\n';
+  const rows = S.biomass.map(b =>
+    `"${b.id}","${b.type}",${b.weight},${b.moisture},"${b.date}"`
+  ).join('\n');
+
+  downloadCsvFile(headers + rows, `SIGAP-Biomassa-DesaSukamaju-${todayIso()}.csv`);
+  addLog('Export CSV data biomassa berhasil diunduh.', 'ok');
+  showToast('File CSV data biomassa berhasil diunduh.');
+}
+
+function exportSensorDataToCsv() {
+  if (S.readings.length === 0) {
+    showToast('Buffer rekaman sensor masih kosong.');
+    return;
+  }
+
+  const headers = 'Waktu,Suhu (C),Tekanan (kPa),Udara (L/min),CO (%),H2 (%),CH4 (%),CO2 (%),LHV (MJ/Nm3),Daya (kW),Status\n';
+  const rows = S.readings.map(r =>
+    `"${r.waktu}",${r.suhu},${r.tekanan},${r.aliranUdara},${r.CO},${r.H2},${r.CH4},${r.CO2},${r.lhv},${r.dayaKw},"${r.status}"`
+  ).join('\n');
+
+  downloadCsvFile(headers + rows, `SIGAP-Telemetri-Reaktor-${todayIso()}.csv`);
+  addLog('Export CSV rekaman sensor reaktor berhasil diunduh.', 'ok');
+  showToast('File CSV log sensor berhasil diunduh.');
+}
+
+function downloadCsvFile(csvContent, filename) {
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  addLog('Export CSV biomassa berhasil', 'ok');
-  toast('Data diekspor ke CSV');
 }
 
-/* ══════════════════════════════════════════
-   OPTIMIZE
-══════════════════════════════════════════ */
-function toggleOptimize() {
-  S.opt = !S.opt;
-  const btn = $('#optimizeBtn');
-  if (btn) {
-    btn.classList.toggle('active-state', S.opt);
-    const svg = btn.querySelector('svg');
-    const lbl = S.opt ? 'Optimasi Aktif — Klik untuk Nonaktifkan' : 'Optimalkan Gasifikasi';
-    btn.childNodes[btn.childNodes.length - 1].textContent = ' ' + lbl;
+/* ════════════════════════════════════════════════════════════════
+   14. NAVIGASI ANTAR LAYAR (5 TABS)
+   ════════════════════════════════════════════════════════════════ */
+function navigateToScreen(screenId) {
+  if (!screenId) return;
+  S.activeScreen = screenId;
+
+  // Toggle active screen element
+  $$('.screen').forEach(el => el.classList.remove('active'));
+  $(`#s-${screenId}`)?.classList.add('active');
+
+  // Toggle bottom nav tab button active state
+  $$('.nav-tab').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.screen === screenId);
+  });
+
+  // Scroll to top
+  $('#main')?.scrollTo({ top: 0, behavior: 'instant' });
+
+  // Pemicu inisialisasi spesifik tiap layar
+  switch (screenId) {
+    case 'dashboard':
+      renderLogStream();
+      break;
+    case 'biomassa':
+      renderFilterChips();
+      renderBiomassScreen();
+      break;
+    case 'monitoring':
+      renderSimulationGrid();
+      setTimeout(() => {
+        if (!S.charts.mon) buildMonitorChart();
+        else updateMonitorChart();
+      }, 50);
+      break;
+    case 'prediksi':
+      recalculatePredictions();
+      setTimeout(() => {
+        if (!S.charts.pred) buildPredictionChart();
+        else updatePredictionChart();
+      }, 50);
+      break;
+    case 'sinkronisasi':
+      renderSyncScreen();
+      break;
   }
-  addLog(S.opt ? 'Mode optimasi gasifikasi diaktifkan' : 'Optimasi dinonaktifkan', 'ok');
-  computePred();
-  toast(S.opt ? 'Optimasi gasifikasi aktif' : 'Optimasi dinonaktifkan');
 }
 
-/* ══════════════════════════════════════════
-   HELPER
-══════════════════════════════════════════ */
-function setText(id, val) {
+/* ════════════════════════════════════════════════════════════════
+   15. EVENT LISTENERS & INTERAKSI (EVENT DELEGATION BULLETPROOF)
+   ════════════════════════════════════════════════════════════════ */
+function attachEventHandlers() {
+  // ── Navigasi Bottom Nav ──
+  document.addEventListener('click', e => {
+    const navBtn = e.target.closest('.nav-tab');
+    if (navBtn) {
+      e.preventDefault();
+      navigateToScreen(navBtn.dataset.screen);
+      return;
+    }
+
+    // Navigasi kartu KPI dashboard langsung ke tab terkait
+    const kpiCard = e.target.closest('[data-screen-target]');
+    if (kpiCard) {
+      e.preventDefault();
+      navigateToScreen(kpiCard.dataset.screenTarget);
+      return;
+    }
+
+    // Tombol aksi data biomassa (Edit / Hapus)
+    const actionBtn = e.target.closest('[data-action]');
+    if (actionBtn) {
+      e.preventDefault();
+      const action = actionBtn.dataset.action;
+
+      if (action === 'edit-biomass') {
+        openEditBiomassModal(actionBtn.dataset.id);
+        return;
+      }
+      if (action === 'delete-biomass') {
+        openDeleteConfirmDialog(actionBtn.dataset.id);
+        return;
+      }
+      if (action === 'filter-chip') {
+        S.filterType = actionBtn.dataset.value;
+        renderFilterChips();
+        renderBiomassScreen();
+        return;
+      }
+      if (action === 'set-sim-mode') {
+        const modeKey = actionBtn.dataset.mode;
+        if (SIM_MODES[modeKey]) {
+          S.mode = modeKey;
+          addLog(`Skenario diubah: ${SIM_MODES[modeKey].label}`, modeKey === 'normal' ? 'ok' : 'warn');
+          renderSimulationGrid();
+          showToast(`Skenario aktif: ${SIM_MODES[modeKey].label}`);
+        }
+        return;
+      }
+      if (action === 'select-sync-method') {
+        S.selectedMethod = actionBtn.dataset.method;
+        renderSyncScreen();
+        return;
+      }
+    }
+
+    // Floating Add Button (+)
+    if (e.target.closest('#fabAddBiomass')) {
+      openAddBiomassModal();
+      return;
+    }
+
+    // Modal Close & Cancel
+    if (e.target.closest('#modalCloseBtn') || e.target.closest('#modalCancelBtn')) {
+      closeModalBackdrop('#biomassModalOverlay');
+      return;
+    }
+    if (e.target.id === 'biomassModalOverlay') {
+      closeModalBackdrop('#biomassModalOverlay');
+      return;
+    }
+
+    // Confirm Delete Dialog Buttons
+    if (e.target.closest('#btnConfirmDelete')) {
+      executeDeleteBiomass();
+      return;
+    }
+    if (e.target.closest('#btnCancelDelete') || e.target.id === 'confirmDeleteOverlay') {
+      closeModalBackdrop('#confirmDeleteOverlay');
+      return;
+    }
+
+    // Trigger Sinkronisasi
+    if (e.target.closest('#btnTriggerSync')) {
+      triggerSyncProcess();
+      return;
+    }
+
+    // Toggle Simulasi Online / Offline
+    if (e.target.closest('#netPillBtn') || e.target.closest('#toggleNetSimBtn')) {
+      S.isOnline = !S.isOnline;
+      updateNetworkBadge();
+      if (S.activeScreen === 'sinkronisasi') renderSyncScreen();
+      addLog(`Koneksi disimulasikan: ${S.isOnline ? 'ONLINE (Internet Aktif)' : 'OFFLINE (Desa Terpencil)'}`, S.isOnline ? 'ok' : 'warn');
+      showToast(S.isOnline ? 'Mode simulasi diubah ke ONLINE.' : 'Mode simulasi diubah ke OFFLINE.');
+      return;
+    }
+
+    // Export CSV
+    if (e.target.closest('#exportBiomassCsvBtn')) {
+      exportBiomassToCsv();
+      return;
+    }
+    if (e.target.closest('#exportSensorCsvBtn')) {
+      exportSensorDataToCsv();
+      return;
+    }
+
+    // Optimasi Gasifikasi Otomatis (Screen 4)
+    if (e.target.closest('#optimizeGasificationBtn')) {
+      toggleAutoOptimization();
+      return;
+    }
+
+    // Clear pencarian biomassa
+    if (e.target.closest('#searchClearBtn')) {
+      const searchInput = $('#biomassSearch');
+      if (searchInput) searchInput.value = '';
+      S.searchQuery = '';
+      $('#searchClearBtn')?.classList.add('hidden');
+      renderBiomassScreen();
+      return;
+    }
+  });
+
+  // Form submit biomassa
+  $('#biomassForm')?.addEventListener('submit', handleBiomassFormSubmit);
+
+  // Input pencarian biomassa dengan debounce halus
+  $('#biomassSearch')?.addEventListener('input', e => {
+    S.searchQuery = e.target.value;
+    const clearBtn = $('#searchClearBtn');
+    if (clearBtn) {
+      clearBtn.classList.toggle('hidden', !S.searchQuery);
+    }
+    renderBiomassScreen();
+  });
+
+  // Tombol keyboard Escape untuk menutup semua modal
+  window.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      closeModalBackdrop('#biomassModalOverlay');
+      closeModalBackdrop('#confirmDeleteOverlay');
+    }
+  });
+
+  // Listener koneksi fisik peramban
+  window.addEventListener('online', () => {
+    S.isOnline = true;
+    updateNetworkBadge();
+    if (S.activeScreen === 'sinkronisasi') renderSyncScreen();
+    addLog('Peramban mendeteksi koneksi internet fisik tersambung.', 'ok');
+  });
+
+  window.addEventListener('offline', () => {
+    S.isOnline = false;
+    updateNetworkBadge();
+    if (S.activeScreen === 'sinkronisasi') renderSyncScreen();
+    addLog('Peramban dalam mode offline.', 'warn');
+  });
+}
+
+function toggleAutoOptimization() {
+  S.isOptimized = !S.isOptimized;
+  const btn = $('#optimizeGasificationBtn');
+  const label = $('#optBtnLabel');
+  if (btn) {
+    btn.classList.toggle('is-optimized', S.isOptimized);
+  }
+  if (label) {
+    label.textContent = S.isOptimized ? 'Optimasi PID Aktif (Stabil)' : 'Optimalkan Gasifikasi Otomatis';
+  }
+  recalculatePredictions();
+  addLog(S.isOptimized ? 'Algoritma optimasi gasifikasi PID diaktifkan.' : 'Optimasi gasifikasi dinonaktifkan.', 'ok');
+  showToast(S.isOptimized ? 'Optimasi PID reaktor aktif: Rasio udara-biomassa diseimbangkan.' : 'Mode optimasi kembali normal.');
+}
+
+/* ════════════════════════════════════════════════════════════════
+   16. BANTUAN DOM & MODAL
+   ════════════════════════════════════════════════════════════════ */
+function setDomText(id, val) {
   const el = document.getElementById(id);
   if (el) el.textContent = val;
 }
 
-/* ══════════════════════════════════════════
-   EVENT DELEGATION (satu listener, semua interaksi)
-══════════════════════════════════════════ */
-function setupEvents() {
-  // Bottom nav
-  $$('.nav-btn').forEach(btn =>
-    btn.addEventListener('click', () => navigate(btn.dataset.screen))
-  );
-
-  // Global click delegation for dynamic content
-  document.addEventListener('click', e => {
-    const t = e.target;
-
-    // Biomass edit/delete
-    const bc = t.closest('[data-action]');
-    if (bc) {
-      e.preventDefault();
-      const { action, id, value } = bc.dataset;
-      if (action === 'edit')   { openEdit(id);     return; }
-      if (action === 'delete') { askDelete(id);    return; }
-      if (action === 'filter') { S.filter = value; renderChips(); renderBiomass(); return; }
-      if (action === 'method') { S.method = value; renderSync();  return; }
-      if (action === 'mode')   { setMode(value);   return; }
-    }
-
-    // FAB
-    if (t.closest('#fabBtn'))      { openAdd();        return; }
-
-    // Biomass form
-    if (t.id === 'modalClose' || t.id === 'cancelBtn') { closeModal();   return; }
-    if (t.id === 'modalOverlay')                        { closeModal();   return; }
-
-    // Confirm
-    if (t.id === 'confirmYes')     { confirmDelete();  return; }
-    if (t.id === 'confirmNo')      { closeConfirm();   return; }
-    if (t.id === 'confirmOverlay') { closeConfirm();   return; }
-
-    // Sync button
-    if (t.closest('#syncBtn'))     { doSync();         return; }
-
-    // Export
-    if (t.closest('#exportBtn'))   { exportCSV();      return; }
-
-    // Optimize
-    if (t.closest('#optimizeBtn')) { toggleOptimize(); return; }
-  });
-
-  // Biomass form submit
-  $('#biomassForm')?.addEventListener('submit', saveBiomass);
-
-  // Search
-  $('#search')?.addEventListener('input', e => {
-    S.q = e.target.value;
-    renderBiomass();
-  });
-
-  // Online / offline
-  window.addEventListener('online',  () => { S.online = true;  renderNetBadge(); if (S.screen === 'sinkronisasi') renderSync(); addLog('Koneksi internet tersambung', 'ok'); });
-  window.addEventListener('offline', () => { S.online = false; renderNetBadge(); if (S.screen === 'sinkronisasi') renderSync(); addLog('Koneksi terputus — mode offline', 'warn'); });
+function setDomWidth(id, pct) {
+  const el = document.getElementById(id);
+  if (el) el.style.width = clamp(+pct, 0, 100) + '%';
 }
 
-function setMode(mode) {
-  if (!MODES[mode]) return;
-  S.mode = mode;
-  addLog(`Mode simulasi: ${MODES[mode].label}`, mode === 'normal' ? 'ok' : 'warn');
-  renderSimGrid();
-  toast(`Simulasi ${MODES[mode].label} aktif`);
+function openModalBackdrop(selector) {
+  const el = $(selector);
+  if (!el) return;
+  el.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
 }
 
-/* ══════════════════════════════════════════
-   INIT
-══════════════════════════════════════════ */
-async function init() {
-  await DB.init();
+function closeModalBackdrop(selector) {
+  const el = $(selector);
+  if (!el) return;
+  el.classList.add('hidden');
+  document.body.style.overflow = '';
+}
 
-  // Load saved state
-  const saved = await DB.get('state');
-  if (saved) {
-    if (Array.isArray(saved.biomass)  && saved.biomass.length)  S.biomass  = saved.biomass;
-    if (Array.isArray(saved.logs)     && saved.logs.length)     S.logs     = saved.logs;
-    if (Array.isArray(saved.queue)    && saved.queue.length)    S.queue    = saved.queue;
-    if (Array.isArray(saved.syncLogs) && saved.syncLogs.length) S.syncLogs = saved.syncLogs;
-    if (saved.meta) S.meta = { ...S.meta, ...saved.meta };
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/* ════════════════════════════════════════════════════════════════
+   17. INISIALISASI APLIKASI
+   ════════════════════════════════════════════════════════════════ */
+async function initializeSigapApp() {
+  // 1. Inisialisasi IndexedDB
+  await LocalDB.init();
+
+  // 2. Muat state yang tersimpan sebelumnya
+  const stored = await LocalDB.get('state');
+  if (stored) {
+    if (Array.isArray(stored.biomass) && stored.biomass.length > 0) S.biomass = stored.biomass;
+    if (Array.isArray(stored.logs) && stored.logs.length > 0)       S.logs = stored.logs;
+    if (Array.isArray(stored.queue))                               S.queue = stored.queue;
+    if (Array.isArray(stored.syncLogs))                            S.syncLogs = stored.syncLogs;
+    if (stored.meta) S.meta = { ...S.meta, ...stored.meta };
   }
 
-  // First-run seed
-  if (!S.biomass.length) { S.biomass = SAMPLE; save(); }
+  // Jika pertama kali dibuka, muat data sampel
+  if (S.biomass.length === 0) {
+    S.biomass = [...INITIAL_BIOMASS];
+    addLog('Sistem SIGAP pertama kali diinisialisasi dengan data sampel.', 'ok');
+    persistState();
+  }
 
-  // Default form date
-  const fd = $('#fDate');
-  if (fd) fd.value = today();
+  // 3. Set tanggal form default ke hari ini
+  const dateField = $('#fDate');
+  if (dateField) dateField.value = todayIso();
 
-  // Initial UI
-  renderLog();
-  renderNavBadge();
-  renderNetBadge();
-  renderSimGrid();
-  renderLive();
+  // 4. Update jam pada header hero
+  const clockEl = $('#heroClock');
+  if (clockEl) {
+    const now = new Date();
+    clockEl.textContent = `${now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · ${fmtTime(now)} WIB`;
+  }
 
-  // Wire up events
-  setupEvents();
+  // 5. Render awal seluruh komponen
+  updateNetworkBadge();
+  renderLogStream();
+  renderFilterChips();
+  renderBiomassScreen();
+  renderSimulationGrid();
+  recalculatePredictions();
+  renderLiveTelemetry();
+  updateQueueBadges();
 
-  // Start simulation (first ticks immediate, then every 3s)
-  tick(); tick();
-  setInterval(tick, 3000);
+  // 6. Pasang event handler global
+  attachEventHandlers();
 
-  // Service Worker
+  // 7. Jalankan loop simulasi reaktor setiap 3 detik
+  setInterval(runSimulationTick, 3000);
+
+  // 8. Registrasi PWA Service Worker (Offline Cache)
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 
-  console.log('SIGAP v3 ready — offline-first biomass gasification monitor');
+  console.log('✅ SIGAP v3.2 — Sistem Gasifikasi Biomassa Pintar siap digunakan secara offline.');
 }
 
-document.addEventListener('DOMContentLoaded', init);
+// Jalankan saat DOM siap
+document.addEventListener('DOMContentLoaded', initializeSigapApp);
