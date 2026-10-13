@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#1B4332">
+<title>SIGAP – Sistem Gasifikasi Pintar</title>
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="logo"><span class="flame">🔥</span><div><b>SIGAP</b><small>Gasifikasi Biomassa Pintar</small></div></div>
+    <div id="netBadge" class="net off">● Offline</div>
+  </header>
+
+  <main>
+    <!-- 1. DASHBOARD -->
+    <section id="s-dashboard" class="screen active">
+      <div class="cards3">
+        <div class="mini"><span>🌾</span><b id="cBiomass">0</b><small>Total Biomassa (kg)</small></div>
+        <div class="mini"><span>🌡️</span><b id="cTemp">0</b><small>Suhu Reaktor (°C)</small></div>
+        <div class="mini"><span>⚡</span><b id="cKwh">0</b><small>Listrik Dihasilkan (kWh)</small></div>
+      </div>
+      <div id="dashStatus" class="statusbox ok">
+        <small>Status Reaktor</small><b id="dashStatusTxt">NORMAL</b><p id="dashStatusMsg"></p>
+      </div>
+      <h3>Aktivitas Terbaru</h3>
+      <ul id="logList" class="log"></ul>
+    </section>
+
+    <!-- 2. BIOMASSA -->
+    <section id="s-biomassa" class="screen">
+      <input id="search" class="search" type="search" placeholder="🔍 Cari jenis atau tanggal…">
+      <div id="chips" class="chips"></div>
+      <div class="totalbar"><span>Total biomassa terkumpul</span><b id="bTotal">0 kg</b></div>
+      <div id="bList"></div>
+    </section>
+
+    <!-- 3. MONITORING -->
+    <section id="s-monitoring" class="screen">
+      <div class="card tempcard" id="tempCard">
+        <div class="row"><small>Suhu Reaktor</small><span id="monBadge" class="badge ok">NORMAL</span></div>
+        <div class="bigtemp"><b id="mTemp">785</b><span>°C</span></div>
+        <div class="gauge"><i id="gaugeMark"></i></div>
+        <div class="gscale"><span>600</span><span>Target 700–900 °C</span><span>1000</span></div>
+      </div>
+      <div class="grid2">
+        <div class="card stat"><small>Tekanan</small><b><span id="mPress">102.3</span> <em>kPa</em></b></div>
+        <div class="card stat"><small>Aliran Udara</small><b><span id="mAir">45.2</span> <em>L/mnt</em></b></div>
+      </div>
+      <div class="card">
+        <h4>Komposisi Syngas</h4>
+        <div id="syngas"></div>
+      </div>
+      <div id="alertBox" class="alert ok"></div>
+      <div class="card">
+        <h4>Suhu &amp; Tekanan (24 jam)</h4>
+        <div class="chartbox"><canvas id="chMon"></canvas></div>
+      </div>
+      <div class="card">
+        <h4>Panel Simulasi</h4>
+        <div id="simBtns" class="simbtns"></div>
+      </div>
+    </section>
+
+    <!-- 4. PREDIKSI -->
+    <section id="s-prediksi" class="screen">
+      <div class="card">
+        <div class="row"><h4>Prediksi Listrik 6 Jam</h4><span class="badge ok" id="r2">R² 0.93</span></div>
+        <div class="chartbox"><canvas id="chPred"></canvas></div>
+        <p id="predMsg" class="hint"></p>
+      </div>
+      <div class="card">
+        <h4>Rekomendasi</h4>
+        <table class="tbl"><thead><tr><th>Jam</th><th>kWh</th><th>Saran</th></tr></thead><tbody id="predRows"></tbody></table>
+      </div>
+      <button id="btnOpt" class="btn primary big">⚙️ Optimalkan Gasifikasi</button>
+    </section>
+
+    <!-- 5. SINKRONISASI -->
+    <section id="s-sinkron" class="screen">
+      <div id="syncStatus" class="statusbox off">
+        <small>Koneksi</small><b id="syncStatusTxt">OFFLINE</b><p id="syncStatusMsg"></p>
+        <button id="btnNet" class="btn ghost">Simulasikan koneksi</button>
+      </div>
+      <div class="card">
+        <div class="row"><h4>Data Tertunda</h4><span id="pendCount" class="badge warn">0</span></div>
+        <ul id="pendList" class="log"></ul>
+      </div>
+      <div class="card">
+        <h4>Metode Sinkronisasi</h4>
+        <div id="methods"></div>
+      </div>
+      <div id="prog" class="prog hidden"><div id="progBar"></div><p id="progTxt"></p></div>
+      <button id="btnSync" class="btn primary big">🔄 Sinkronisasi Sekarang</button>
+      <p id="lastSync" class="hint center"></p>
+      <div class="grid2">
+        <button class="btn ghost" id="exBio">⬇ CSV Biomassa</button>
+        <button class="btn ghost" id="exMon">⬇ CSV Monitoring</button>
+      </div>
+    </section>
+  </main>
+
+  <button id="fab" class="fab" aria-label="Tambah biomassa">+</button>
+
+  <nav class="nav" id="nav">
+    <button data-s="dashboard" class="active"><i>🏠</i>Dashboard</button>
+    <button data-s="biomassa"><i>🌾</i>Biomassa</button>
+    <button data-s="monitoring"><i>📈</i>Monitoring</button>
+    <button data-s="prediksi"><i>🤖</i>Prediksi</button>
+    <button data-s="sinkron"><i>📡</i>Sinkron<em id="navBadge" class="hidden">0</em></button>
+  </nav>
+
+  <div id="modal" class="modal hidden">
+    <div class="sheet">
+      <h3 id="mTitle">Tambah Biomassa</h3>
+      <label>Jenis<select id="fType"></select></label>
+      <label>Berat (kg)<input id="fWeight" type="number" min="1" step="0.1" inputmode="decimal"></label>
+      <label>Kadar air (%)<input id="fMoist" type="number" min="0" max="100" step="0.1" inputmode="decimal"></label>
+      <p id="fErr" class="err"></p>
+      <div class="grid2"><button id="fCancel" class="btn ghost">Batal</button><button id="fSave" class="btn primary">Simpan</button></div>
+    </div>
+  </div>
+  <div id="toast" class="toast hidden"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
