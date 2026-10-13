@@ -1,122 +1,142 @@
 'use strict';
 /**
- * SIGAP – Sistem Gasifikasi Biomassa Pintar
- * Versi 2.0 – Offline-first SPA
- * © 2026 SIGAP Team
+ * SIGAP v3 — app.js
+ * Semua interaksi pakai event delegation (tidak ada inline onclick)
+ * sehingga tombol dijamin berfungsi pada konten dinamis.
  */
 
-/* ══════════════════════════════════════════════════
+/* ══════════════════════════════════════════
    UTILS
-══════════════════════════════════════════════════ */
-const $ = s => document.querySelector(s);
+══════════════════════════════════════════ */
+const $  = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
-const rnd = x => (Math.random() - .5) * 2 * x;
-const fmt = (n, d = 1) => Number(n).toFixed(d);
-const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
-const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-const today = () => new Date().toISOString().slice(0, 10);
-const hm = (d = new Date()) => d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).replace(/\./g, ':');
-const dtFmt = s => new Date(s).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
-const timeFmt = ts => {
+const rnd    = x => (Math.random() - .5) * 2 * x;
+const fmt    = (n, d = 1) => (+n).toFixed(d);
+const clamp  = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const uid    = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const today  = () => new Date().toISOString().slice(0, 10);
+
+const hms = (d = new Date()) =>
+  d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+const dtShort = s =>
+  new Date(s + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+
+const tsShort = ts => {
   const d = new Date(ts);
-  return `${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} ${hm(d)}`;
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ' ' + hms(d);
 };
 
-/* ══════════════════════════════════════════════════
+/* ══════════════════════════════════════════
    CONSTANTS
-══════════════════════════════════════════════════ */
+══════════════════════════════════════════ */
 const TYPES = ['Sekam Padi', 'Jerami', 'Tongkol Jagung', 'Kayu Chip'];
-const ICONS = { 'Sekam Padi': '🌾', 'Jerami': '🌿', 'Tongkol Jagung': '🌽', 'Kayu Chip': '🪵' };
+
+const TYPE_MARK = {
+  'Sekam Padi'    : { abbr: 'SP', cls: 'bm-sekam'  },
+  'Jerami'        : { abbr: 'JR', cls: 'bm-jerami'  },
+  'Tongkol Jagung': { abbr: 'TJ', cls: 'bm-tongkol' },
+  'Kayu Chip'     : { abbr: 'KC', cls: 'bm-kayu'    },
+};
 
 const CHIPS = [
-  { label: 'Semua', value: '' },
-  { label: '🌾 Sekam', value: 'Sekam Padi' },
-  { label: '🌿 Jerami', value: 'Jerami' },
-  { label: '🌽 Tongkol', value: 'Tongkol Jagung' },
-  { label: '🪵 Kayu', value: 'Kayu Chip' },
+  { label: 'Semua',         value: '' },
+  { label: 'Sekam Padi',    value: 'Sekam Padi' },
+  { label: 'Jerami',        value: 'Jerami' },
+  { label: 'Tongkol Jagung',value: 'Tongkol Jagung' },
+  { label: 'Kayu Chip',     value: 'Kayu Chip' },
 ];
 
 const MODES = {
-  normal:   { label: '✅ Normal',    icon: '✅', t: 785, p: 102.3, a: 45.2,  cls: '' },
-  overheat: { label: '🔥 Overheat',  icon: '🔥', t: 945, p: 104.5, a: 52.0,  cls: 'crit' },
-  leak:     { label: '💧 Kebocoran', icon: '💧', t: 765, p: 83.0,  a: 40.0,  cls: 'warn' },
-  tar:      { label: '⚫ Tar',       icon: '⚫', t: 735, p: 101.5, a: 26.0,  cls: 'warn' },
-  cold:     { label: '❄️ Suhu Rendah',icon: '❄️', t: 640, p: 101.0, a: 38.0,  cls: 'warn' },
+  normal  : { label: 'Normal',     cls: '',        t: 785,  p: 102.3, a: 45.2 },
+  overheat: { label: 'Overheat',   cls: 'sim-crit', t: 945, p: 104.5, a: 52.0 },
+  leak    : { label: 'Kebocoran',  cls: 'sim-warn', t: 765, p: 83.0,  a: 40.0 },
+  tar     : { label: 'Tar',        cls: 'sim-warn', t: 735, p: 101.5, a: 26.0 },
+  cold    : { label: 'Suhu Rendah',cls: 'sim-warn', t: 640, p: 101.0, a: 38.0 },
 };
 
 const METHODS = {
-  internet: { name: 'Internet',  icon: '🌐', desc: 'Kecepatan tinggi, butuh sinyal data',     speed: '~1s',  ms: 900  },
-  sms:      { name: 'SMS',       icon: '💬', desc: 'Paket kecil via sinyal seluler GSM/4G',   speed: '~8s',  ms: 3200 },
-  lora:     { name: 'LoRa',      icon: '📻', desc: 'Radio jarak jauh ke gateway desa',        speed: '~25s', ms: 8000 },
+  internet: { name: 'Internet',  desc: 'Via sinyal data — kecepatan tinggi',     speed: '~1 detik',  ms: 900,  icon: netIcon()    },
+  sms     : { name: 'SMS',       desc: 'Paket data kecil melalui jaringan GSM',  speed: '~8 detik',  ms: 3200, icon: smsIcon()    },
+  lora    : { name: 'LoRa',      desc: 'Radio jarak jauh ke gateway desa',       speed: '~25 detik', ms: 8000, icon: radioIcon()  },
 };
 
-const SAMPLE_BIOMASS = [
+const SAMPLE = [
   { id: uid(), type: 'Sekam Padi',     weight: 150, moisture: 12, date: '2026-10-10' },
   { id: uid(), type: 'Jerami',         weight: 80,  moisture: 15, date: '2026-10-11' },
   { id: uid(), type: 'Tongkol Jagung', weight: 120, moisture: 10, date: '2026-10-12' },
   { id: uid(), type: 'Kayu Chip',      weight: 200, moisture: 8,  date: '2026-10-13' },
 ];
 
-/* ══════════════════════════════════════════════════
-   STATE
-══════════════════════════════════════════════════ */
+/* SVG icon helpers for methods (no CDN, no emoji) */
+function netIcon() {
+  return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>`;
+}
+function smsIcon() {
+  return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>`;
+}
+function radioIcon() {
+  return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>`;
+}
+
+/* ══════════════════════════════════════════
+   APP STATE
+══════════════════════════════════════════ */
 const S = {
-  biomass:   [],
-  logs:      [],
-  queue:     [],
-  syncLogs:  [],
-  readings:  [],
-  meta:      { kwh: 12.4, lastSync: null },
-  mode:      'normal',
-  cur:       { t: 785, p: 102.3, a: 45.2 },
-  gas:       { CO: 22.5, H2: 15.8, CH4: 4.2, CO2: 12.1 },
-  kw:        2.3,
-  an:        { level: 0, items: [] },
+  biomass  : [],
+  logs     : [],
+  queue    : [],
+  syncLogs : [],
+  readings : [],
+  meta     : { kwh: 12.4, lastSync: null },
+  mode     : 'normal',
+  cur      : { t: 785, p: 102.3, a: 45.2 },
+  gas      : { CO: 22.5, H2: 15.8, CH4: 4.2, CO2: 12.1 },
+  kw       : 2.3,
+  an       : { level: 0, items: [] },
   prevLevel: 0,
-  ticks:     0,
-  mon:       { labels: [], t: [], p: [] },
-  pred:      [],
-  opt:       false,
-  online:    navigator.onLine,
-  filter:    '',
-  q:         '',
-  method:    'internet',
-  syncing:   false,
-  editingId: null,
-  deleteId:  null,
-  charts:    {},
-  screen:    'dashboard',
+  ticks    : 0,
+  mon      : { labels: [], t: [], p: [] },
+  pred     : [],
+  opt      : false,
+  online   : navigator.onLine,
+  filter   : '',
+  q        : '',
+  method   : 'internet',
+  syncing  : false,
+  editId   : null,
+  deleteId : null,
+  charts   : {},
+  screen   : 'dashboard',
 };
 
-/* ══════════════════════════════════════════════════
-   INDEXEDDB / LOCALSTORAGE WRAPPER
-══════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════
+   INDEXEDDB / LOCALSTORAGE
+══════════════════════════════════════════ */
 const DB = {
   db: null,
   async init() {
     try {
       this.db = await new Promise((ok, no) => {
-        const r = indexedDB.open('sigap-v2', 1);
+        const r = indexedDB.open('sigap-v3', 1);
         r.onupgradeneeded = () => r.result.createObjectStore('kv');
         r.onsuccess = () => ok(r.result);
-        r.onerror = () => no(r.error);
+        r.onerror   = () => no(r.error);
       });
-    } catch (e) { this.db = null; }
+    } catch { this.db = null; }
   },
-  _ls(k) { return JSON.parse(localStorage.getItem('sigap2_' + k) || 'null'); },
+  _lsGet(k) { return JSON.parse(localStorage.getItem('sigap3.' + k) || 'null'); },
+  _lsSet(k, v) { try { localStorage.setItem('sigap3.' + k, JSON.stringify(v)); } catch {} },
   get(k) {
-    if (!this.db) return Promise.resolve(this._ls(k));
+    if (!this.db) return Promise.resolve(this._lsGet(k));
     return new Promise(ok => {
       const r = this.db.transaction('kv').objectStore('kv').get(k);
       r.onsuccess = () => ok(r.result ?? null);
-      r.onerror = () => ok(null);
+      r.onerror   = () => ok(null);
     });
   },
   set(k, v) {
-    if (!this.db) {
-      try { localStorage.setItem('sigap2_' + k, JSON.stringify(v)); } catch {}
-      return Promise.resolve();
-    }
+    if (!this.db) { this._lsSet(k, v); return Promise.resolve(); }
     return new Promise(ok => {
       const t = this.db.transaction('kv', 'readwrite');
       t.objectStore('kv').put(JSON.parse(JSON.stringify(v)), k);
@@ -126,101 +146,95 @@ const DB = {
 };
 
 const save = () => DB.set('state', {
-  biomass: S.biomass, logs: S.logs, queue: S.queue,
-  syncLogs: S.syncLogs, meta: S.meta,
+  biomass : S.biomass,
+  logs    : S.logs,
+  queue   : S.queue,
+  syncLogs: S.syncLogs,
+  meta    : S.meta,
 });
 
-/* ══════════════════════════════════════════════════
-   LOGGING & QUEUE
-══════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════
+   LOG & QUEUE
+══════════════════════════════════════════ */
 function addLog(text, lvl = 'ok') {
   S.logs.unshift({ ts: Date.now(), text, lvl });
   if (S.logs.length > 50) S.logs.length = 50;
-  renderLog();
+  if (S.screen === 'dashboard') renderLog();
   save();
 }
 
 function enqueue(type, desc) {
   S.queue.push({ id: uid(), type, desc, ts: Date.now() });
-  renderQueueBadge();
+  renderNavBadge();
   if (S.screen === 'sinkronisasi') renderSync();
   save();
 }
 
-function toast(msg, duration = 2800) {
-  const t = $('#toast');
-  t.textContent = msg;
-  t.classList.remove('hidden');
-  clearTimeout(toast._h);
-  toast._h = setTimeout(() => t.classList.add('hidden'), duration);
+function toast(msg, ms = 2800) {
+  const el = $('#toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.add('hidden'), ms);
 }
 
-/* ══════════════════════════════════════════════════
+/* ══════════════════════════════════════════
    SIMULATION ENGINE
-══════════════════════════════════════════════════ */
+══════════════════════════════════════════ */
 function tick() {
   const m = MODES[S.mode], c = S.cur;
 
-  // Smooth convergence toward mode target with realistic noise
   c.t += (m.t - c.t) * .18 + rnd(7);
   c.p += (m.p - c.p) * .18 + rnd(.6);
   c.a  = clamp(c.a + (m.a - c.a) * .18 + rnd(1.2), 5, 80);
 
-  // Syngas composition (physics-correlated)
-  const dT = c.t - 785;
-  const g = S.gas;
-  g.CO  = clamp(22.5 + dT * .038 + rnd(.5),   5,  35);
-  g.H2  = clamp(15.8 + dT * .028 + rnd(.4),   4,  28);
-  g.CH4 = clamp(4.2  - dT * .014 + rnd(.2),  .5,   9);
+  const dT = c.t - 785, g = S.gas;
+  g.CO  = clamp(22.5 + dT * .038 + rnd(.5), 5, 35);
+  g.H2  = clamp(15.8 + dT * .028 + rnd(.4), 4, 28);
+  g.CH4 = clamp(4.2  - dT * .014 + rnd(.2), .5, 9);
   g.CO2 = clamp(12.1 + (c.a - 45) * .06 + rnd(.3), 4, 22);
 
-  // Power output (Lower Heating Value approximation)
-  const lhv = .1263 * g.CO + .1078 * g.H2 + .3589 * g.CH4; // MJ/Nm³
-  const eff = (c.t >= 700 && c.t <= 900) ? 1 : .65;
+  const lhv = .1263 * g.CO + .1078 * g.H2 + .3589 * g.CH4;
+  const eff  = (c.t >= 700 && c.t <= 900) ? 1 : .65;
   S.kw = Math.max(0, lhv * c.a * .06 * 2 / 3.6 * .25 * eff);
-  S.meta.kwh += S.kw * 3 / 3600 * 60; // accelerated 60×
+  S.meta.kwh += S.kw * 3 / 3600 * 60;
 
-  // Anomaly detection
   const newAn = analyze();
   if (newAn.level !== S.prevLevel) {
-    const labels = ['kembali NORMAL', 'WASPADA ⚠️', 'KRITIS 🚨'];
-    const lvlKeys = ['ok', 'warn', 'crit'];
-    addLog(`Status reaktor: ${labels[newAn.level]} — ${newAn.items[0].text}`, lvlKeys[newAn.level]);
-    if (newAn.level > 0) enqueue('peringatan', `Status ${['', 'WASPADA', 'KRITIS'][newAn.level]}: ${newAn.items[0].text}`);
+    const lbl = ['kembali NORMAL', 'WASPADA', 'KRITIS'][newAn.level];
+    addLog(`Status reaktor ${lbl}: ${newAn.items[0].text}`, ['ok','warn','crit'][newAn.level]);
+    if (newAn.level > 0) enqueue('peringatan', `${['','WASPADA','KRITIS'][newAn.level]}: ${newAn.items[0].text}`);
     S.prevLevel = newAn.level;
   }
   S.an = newAn;
 
-  // Store reading
   const reading = {
-    waktu: new Date().toISOString(),
-    suhu: +fmt(c.t), tekanan: +fmt(c.p), udara: +fmt(c.a),
+    waktu  : new Date().toISOString(),
+    suhu   : +fmt(c.t), tekanan: +fmt(c.p), udara: +fmt(c.a),
     CO: +fmt(g.CO), H2: +fmt(g.H2), CH4: +fmt(g.CH4), CO2: +fmt(g.CO2),
     kw: +fmt(S.kw, 2),
-    status: ['NORMAL', 'WARNING', 'CRITICAL'][newAn.level],
+    status : ['NORMAL','WARNING','CRITICAL'][newAn.level],
   };
   S.readings.push(reading);
   if (S.readings.length > 300) S.readings.shift();
 
-  // Monitor chart data (max 24 points)
-  S.mon.labels.push(hm());
+  S.mon.labels.push(hms());
   S.mon.t.push(reading.suhu);
   S.mon.p.push(reading.tekanan);
-  if (S.mon.t.length > 24) {
-    S.mon.labels.shift(); S.mon.t.shift(); S.mon.p.shift();
-  }
+  if (S.mon.t.length > 24) { S.mon.labels.shift(); S.mon.t.shift(); S.mon.p.shift(); }
 
   S.ticks++;
-  if (S.ticks % 20 === 0) enqueue('sensor', 'Batch pembacaan sensor reaktor');
+  if (S.ticks % 20 === 0) enqueue('sensor', 'Batch data sensor reaktor');
   if (S.ticks % 5  === 0) save();
   if (S.ticks % 8  === 0) computePred();
 
   renderLive();
 }
 
-/* ══════════════════════════════════════════════════
-   ANOMALY DETECTION (Rule-Based AI)
-══════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════
+   ANOMALY DETECTION
+══════════════════════════════════════════ */
 function analyze() {
   const { t, p, a } = S.cur;
   const items = [];
@@ -228,30 +242,30 @@ function analyze() {
   const cf = base => Math.round(clamp(base + rnd(2.5), 60, 99));
 
   if (t > 900) {
-    items.push({ text: 'Suhu tinggi, kurangi udara masuk', conf: cf(82 + (t - 900) / 5) });
+    items.push({ text: 'Suhu tinggi — kurangi pasokan udara masuk', conf: cf(82 + (t - 900) / 5) });
     level = Math.max(level, t > 950 ? 2 : 1);
   }
   if (t < 700) {
-    items.push({ text: 'Suhu rendah, tambah oksigen/udara', conf: cf(83 + (700 - t) / 5) });
+    items.push({ text: 'Suhu rendah — tambah oksigen atau udara primer', conf: cf(83 + (700 - t) / 5) });
     level = Math.max(level, t < 600 ? 2 : 1);
   }
   if (a < 32 && t < 790) {
-    items.push({ text: 'Tar terdeteksi: rasio udara terlalu rendah', conf: cf(88) });
+    items.push({ text: 'Tar terdeteksi — rasio udara terhadap biomassa terlalu rendah', conf: cf(88) });
     level = Math.max(level, 1);
   }
   if (p < 95) {
-    items.push({ text: 'Tekanan turun, periksa kemungkinan kebocoran', conf: cf(84 + (95 - p)) });
+    items.push({ text: 'Tekanan turun — periksa kemungkinan kebocoran pada sistem', conf: cf(84 + (95 - p)) });
     level = Math.max(level, p < 88 ? 2 : 1);
   }
   if (!items.length) {
-    items.push({ text: 'Semua parameter dalam batas normal ✓', conf: cf(96) });
+    items.push({ text: 'Semua parameter dalam batas operasi normal', conf: cf(96) });
   }
   return { level, items };
 }
 
-/* ══════════════════════════════════════════════════
-   PREDICTION ENGINE (Simulated AI)
-══════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════
+   AI PREDICTION
+══════════════════════════════════════════ */
 function computePred() {
   const factors = S.opt
     ? [1.06, 1.13, 1.19, 1.17, 1.11, 1.07]
@@ -261,15 +275,14 @@ function computePred() {
   if (S.screen === 'prediksi') renderPred();
 }
 
-/* ══════════════════════════════════════════════════
-   CHARTS
-══════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════
+   CHARTS (Chart.js + canvas fallback)
+══════════════════════════════════════════ */
 function makeMonitorChart() {
   const ctx = $('#monChart');
   if (!ctx) return;
-  if (S.charts.mon) { S.charts.mon.destroy(); }
-
-  if (typeof Chart === 'undefined') { renderFallbackChart(ctx, 'mon'); return; }
+  if (S.charts.mon) { S.charts.mon.destroy(); S.charts.mon = null; }
+  if (typeof Chart === 'undefined') { fbChart(ctx, S.mon.labels, S.mon.t, '#EF4444'); return; }
 
   S.charts.mon = new Chart(ctx, {
     type: 'line',
@@ -279,60 +292,33 @@ function makeMonitorChart() {
         {
           label: 'Suhu (°C)',
           data: S.mon.t,
-          borderColor: '#E74C3C',
-          backgroundColor: 'rgba(231,76,60,.08)',
-          fill: true,
-          tension: .4,
-          pointRadius: 0,
-          borderWidth: 2,
+          borderColor: '#EF4444',
+          backgroundColor: 'rgba(239,68,68,.07)',
+          fill: true, tension: .4, pointRadius: 0, borderWidth: 2,
           yAxisID: 'y',
         },
         {
           label: 'Tekanan (kPa)',
           data: S.mon.p,
-          borderColor: '#3498db',
-          backgroundColor: 'rgba(52,152,219,.06)',
-          fill: true,
-          tension: .4,
-          pointRadius: 0,
-          borderWidth: 2,
+          borderColor: '#3B82F6',
+          backgroundColor: 'rgba(59,130,246,.05)',
+          fill: true, tension: .4, pointRadius: 0, borderWidth: 2,
           yAxisID: 'y1',
         },
       ],
     },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
+      responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: {
-          position: 'top',
-          labels: { font: { size: 11, family: 'Inter' }, boxWidth: 12, padding: 12 },
-        },
-        tooltip: {
-          callbacks: {
-            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}`,
-          },
-        },
+        legend: { position: 'top', labels: { font: { size: 11, family: 'Inter' }, boxWidth: 10, padding: 10 } },
       },
       scales: {
-        x: {
-          display: true,
-          ticks: { font: { size: 9 }, maxTicksLimit: 6, color: '#6b8070' },
-          grid: { color: '#e2ece6' },
-        },
-        y: {
-          type: 'linear', position: 'left',
-          ticks: { font: { size: 9 }, color: '#E74C3C' },
-          grid: { color: '#e2ece6' },
-        },
-        y1: {
-          type: 'linear', position: 'right',
-          ticks: { font: { size: 9 }, color: '#3498db' },
-          grid: { drawOnChartArea: false },
-        },
+        x:  { ticks: { font: { size: 9 }, maxTicksLimit: 5, color: '#7A9A8A' }, grid: { color: '#E0EAE4' } },
+        y:  { position: 'left',  ticks: { font: { size: 9 }, color: '#EF4444' }, grid: { color: '#E0EAE4' } },
+        y1: { position: 'right', ticks: { font: { size: 9 }, color: '#3B82F6' }, grid: { drawOnChartArea: false } },
       },
-      animation: { duration: 400 },
+      animation: { duration: 300 },
     },
   });
 }
@@ -340,7 +326,7 @@ function makeMonitorChart() {
 function updateMonitorChart() {
   const ch = S.charts.mon;
   if (!ch) return;
-  ch.data.labels = [...S.mon.labels];
+  ch.data.labels          = [...S.mon.labels];
   ch.data.datasets[0].data = [...S.mon.t];
   ch.data.datasets[1].data = [...S.mon.p];
   ch.update('none');
@@ -349,17 +335,16 @@ function updateMonitorChart() {
 function makePredChart() {
   const ctx = $('#predChart');
   if (!ctx) return;
-  if (S.charts.pred) { S.charts.pred.destroy(); }
+  if (S.charts.pred) { S.charts.pred.destroy(); S.charts.pred = null; }
 
-  const now = new Date();
+  const now    = new Date();
   const labels = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(now.getTime() + (i + 1) * 3600000);
+    const d = new Date(now.getTime() + (i + 1) * 3600_000);
     return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
   });
+  const data = S.pred.length === 6 ? S.pred : [2.3, 2.4, 2.6, 2.5, 2.2, 2.0];
 
-  if (typeof Chart === 'undefined') { renderFallbackChart(ctx, 'pred'); return; }
-
-  const pred = S.pred.length === 6 ? S.pred : [2.3, 2.4, 2.6, 2.5, 2.2, 2.0];
+  if (typeof Chart === 'undefined') { fbChart(ctx, labels, data, '#16A34A'); return; }
 
   S.charts.pred = new Chart(ctx, {
     type: 'line',
@@ -368,55 +353,32 @@ function makePredChart() {
       datasets: [
         {
           label: 'Prediksi Daya (kW)',
-          data: pred,
-          borderColor: '#27AE60',
-          backgroundColor: 'rgba(39,174,96,.1)',
-          fill: true,
-          tension: .45,
-          pointRadius: 5,
-          pointBackgroundColor: '#27AE60',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2,
+          data,
+          borderColor: '#16A34A',
+          backgroundColor: 'rgba(22,163,74,.08)',
+          fill: true, tension: .4,
+          pointRadius: 4, pointBackgroundColor: '#16A34A',
+          pointBorderColor: '#fff', pointBorderWidth: 2,
           borderWidth: 2.5,
         },
         {
-          label: 'Daya Saat Ini',
+          label: 'Daya saat ini',
           data: Array(6).fill(+fmt(S.kw, 2)),
-          borderColor: '#F39C12',
-          borderDash: [6, 4],
-          borderWidth: 1.5,
-          pointRadius: 0,
-          fill: false,
-          tension: 0,
+          borderColor: '#CA8A04', borderDash: [5, 4],
+          borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0,
         },
       ],
     },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
+      responsive: true, maintainAspectRatio: false,
       plugins: {
-        legend: {
-          position: 'top',
-          labels: { font: { size: 11, family: 'Inter' }, boxWidth: 12, padding: 12 },
-        },
-        tooltip: {
-          callbacks: {
-            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)} kW`,
-          },
-        },
+        legend: { position: 'top', labels: { font: { size: 11, family: 'Inter' }, boxWidth: 10, padding: 10 } },
       },
       scales: {
-        x: {
-          ticks: { font: { size: 9 }, color: '#6b8070' },
-          grid: { color: '#e2ece6' },
-        },
-        y: {
-          ticks: { font: { size: 9 }, color: '#27AE60', callback: v => v + ' kW' },
-          grid: { color: '#e2ece6' },
-          beginAtZero: false,
-        },
+        x: { ticks: { font: { size: 9 }, color: '#7A9A8A' }, grid: { color: '#E0EAE4' } },
+        y: { ticks: { font: { size: 9 }, color: '#16A34A', callback: v => v + ' kW' }, grid: { color: '#E0EAE4' }, beginAtZero: false },
       },
-      animation: { duration: 600, easing: 'easeInOutQuart' },
+      animation: { duration: 500 },
     },
   });
 }
@@ -429,176 +391,198 @@ function updatePredChart() {
   ch.update();
 }
 
-/** Fallback canvas chart if Chart.js CDN fails */
-function renderFallbackChart(cv, type) {
-  const data = type === 'mon' ? S.mon.t : (S.pred.length ? S.pred : [2.3, 2.4, 2.6, 2.5, 2.2, 2.0]);
+/** Simple canvas fallback if Chart.js CDN unavailable */
+function fbChart(cv, labels, data, color) {
   const dpr = window.devicePixelRatio || 1;
-  const w = cv.clientWidth || 320, h = cv.clientHeight || 180;
+  const w = cv.clientWidth || 300, h = cv.clientHeight || 180;
   cv.width = w * dpr; cv.height = h * dpr;
-  const x = cv.getContext('2d');
-  x.scale(dpr, dpr);
-  x.clearRect(0, 0, w, h);
-  const pad = { t: 20, b: 20, l: 30, r: 10 };
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+  const pad = { t: 20, b: 20, l: 36, r: 10 };
   const iw = w - pad.l - pad.r, ih = h - pad.t - pad.b;
   const n = data.length;
+  if (!n) return;
   const mn = Math.min(...data), mx = Math.max(...data), rng = (mx - mn) || 1;
-  const px = i => pad.l + i * iw / Math.max(1, n - 1);
-  const py = v => pad.t + ih - (v - mn) / rng * ih;
+  const px = i => pad.l + (i / Math.max(n - 1, 1)) * iw;
+  const py = v => pad.t + ih - ((v - mn) / rng) * ih;
 
   // Grid
-  x.strokeStyle = '#e2ece6'; x.lineWidth = 1;
+  ctx.strokeStyle = '#E0EAE4'; ctx.lineWidth = 1;
   for (let g = 0; g <= 4; g++) {
     const y = pad.t + g * ih / 4;
-    x.beginPath(); x.moveTo(pad.l, y); x.lineTo(w - pad.r, y); x.stroke();
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke();
   }
+
+  // Fill
+  ctx.beginPath();
+  data.forEach((v, i) => i ? ctx.lineTo(px(i), py(v)) : ctx.moveTo(px(i), py(v)));
+  ctx.lineTo(px(n - 1), pad.t + ih); ctx.lineTo(px(0), pad.t + ih); ctx.closePath();
+  ctx.fillStyle = color + '14'; ctx.fill();
 
   // Line
-  x.strokeStyle = type === 'mon' ? '#E74C3C' : '#27AE60';
-  x.lineWidth = 2.5; x.lineJoin = 'round';
-  x.beginPath();
-  data.forEach((v, i) => i ? x.lineTo(px(i), py(v)) : x.moveTo(px(i), py(v)));
-  x.stroke();
+  ctx.beginPath();
+  data.forEach((v, i) => i ? ctx.lineTo(px(i), py(v)) : ctx.moveTo(px(i), py(v)));
+  ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
+  ctx.stroke();
 
   // Dots
-  x.fillStyle = x.strokeStyle;
-  data.forEach((v, i) => { x.beginPath(); x.arc(px(i), py(v), 3, 0, Math.PI * 2); x.fill(); });
+  ctx.fillStyle = color;
+  data.forEach((v, i) => { ctx.beginPath(); ctx.arc(px(i), py(v), 3.5, 0, Math.PI * 2); ctx.fill(); });
 
-  // Labels
-  x.fillStyle = '#6b8070'; x.font = '10px Inter,sans-serif';
-  x.fillText(fmt(mn, 1), 2, py(mn) + 4);
-  x.fillText(fmt(mx, 1), 2, py(mx) + 4);
+  // Y-axis labels
+  ctx.fillStyle = '#7A9A8A'; ctx.font = '10px Inter,sans-serif'; ctx.textAlign = 'right';
+  ctx.fillText(fmt(mx, 1), pad.l - 4, py(mx) + 4);
+  ctx.fillText(fmt(mn, 1), pad.l - 4, py(mn) + 4);
+
+  // X-axis labels
+  ctx.textAlign = 'center';
+  [0, Math.floor(n / 2), n - 1].forEach(i => {
+    if (labels[i]) ctx.fillText(labels[i], px(i), h - 4);
+  });
 }
 
-/* ══════════════════════════════════════════════════
-   RENDER FUNCTIONS
-══════════════════════════════════════════════════ */
-
-/** Live sensor values – runs every 3s */
+/* ══════════════════════════════════════════
+   RENDER — LIVE SENSOR VALUES (every 3s)
+══════════════════════════════════════════ */
 function renderLive() {
   const c = S.cur, g = S.gas, an = S.an;
-  const lvl = an.level; // 0=ok, 1=warn, 2=crit
-  const lvlClass = ['ok', 'warn', 'crit'][lvl];
-  const lvlText  = ['NORMAL', 'WASPADA', 'KRITIS'][lvl];
-  const statusCard = ['✓ Optimal', '⚠ Waspada', '✕ Kritis'][lvl];
+  const lv  = an.level; // 0=ok, 1=warn, 2=crit
+  const cls = ['ok', 'warn', 'crit'][lv];
+  const txt = ['NORMAL', 'WASPADA', 'KRITIS'][lv];
+  const badge = ['Optimal', 'Waspada', 'Kritis'][lv];
 
-  // ── DASHBOARD ──
-  setText('cTemp', fmt(c.t, 0));
-  setText('cKwh', fmt(S.meta.kwh, 1));
+  /* ── Dashboard ── */
+  setText('cTemp',  fmt(c.t, 0));
+  setText('cKwh',   fmt(S.meta.kwh, 1));
   setText('qsPressure', fmt(c.p, 1));
-  setText('qsAirflow', fmt(c.a, 1));
-  setText('qsPower', fmt(S.kw, 2));
+  setText('qsAirflow',  fmt(c.a, 1));
+  setText('qsPower',    fmt(S.kw, 2));
 
-  const dCard = $('#dashStatusCard');
-  if (dCard) {
-    dCard.className = `status-card ${lvlClass}`;
-    setText('dashStatusTxt', lvlText);
-    setText('dashBadge', statusCard);
-  }
+  const sc = $('#statusCard');
+  if (sc) { sc.className = `status-card ${cls}`; }
+  setText('dashStatusTxt',   txt);
+  setText('dashStatusBadge', badge);
 
-  // Dashboard anomaly banner
-  const dAnomaly = $('#dashAnomaly');
-  if (dAnomaly) {
-    if (lvl > 0) {
-      dAnomaly.classList.remove('hidden');
-      dAnomaly.className = `anomaly-banner ${lvl === 2 ? 'crit' : ''}`;
-      setText('dashAnomalyMsg', an.items[0].text);
-      setText('dashAnomalyConf', an.items[0].conf + '%');
+  const dot = $('#statusDot');
+  if (dot) { dot.style.background = ['var(--ok)','var(--warn)','var(--crit)'][lv]; }
+
+  // Dashboard anomaly
+  const da = $('#dashAnomaly');
+  if (da) {
+    if (lv > 0) {
+      da.classList.remove('hidden');
+      da.className = `alert-card${lv === 2 ? ' crit' : ''}`;
+      setText('dashAnomalyMsg',  an.items[0].text);
+      setText('dashAnomalyConf', an.items[0].conf + '% yakin');
     } else {
-      dAnomaly.classList.add('hidden');
+      da.classList.add('hidden');
     }
   }
 
-  // ── MONITORING ──
-  const tempVal = +fmt(c.t, 0);
-  setText('mTemp', tempVal);
+  /* ── Monitoring ── */
+  const tempNum = Math.round(c.t);
+  setText('mTemp',    String(tempNum));
   setText('mPressure', fmt(c.p, 1));
-  setText('mAirflow', fmt(c.a, 1));
-  setText('mPower', fmt(S.kw, 2));
+  setText('mAirflow',  fmt(c.a, 1));
+  setText('mPower',    fmt(S.kw, 2));
 
-  // Temperature color
-  const tempEl = $('#mTemp');
-  if (tempEl) {
-    if (c.t < 700)      tempEl.style.color = '#3498db';
-    else if (c.t > 900) tempEl.style.color = '#E74C3C';
-    else                tempEl.style.color = '#fff';
+  // Temperature number color
+  const tn = $('#mTemp');
+  if (tn) {
+    tn.className = 'temp-num mono' + (c.t < 700 ? ' cold' : c.t > 900 ? ' hot' : '');
   }
 
-  // Temp gauge marker (500°C = 0%, 1000°C = 100%)
-  const marker = $('#tempMarker');
-  if (marker) {
-    const pct = clamp((c.t - 500) / 500 * 100, 0, 100);
-    marker.style.left = pct + '%';
-  }
-
-  // Temp hero card color
-  const th = $('#tempHero');
-  if (th) {
-    if (lvl === 2) th.style.background = 'linear-gradient(135deg, #3d0f0f 0%, #8b2020 100%)';
-    else if (lvl === 1) th.style.background = 'linear-gradient(135deg, #3d2a0a 0%, #7a5010 100%)';
-    else th.style.background = 'linear-gradient(135deg, #1a3028 0%, #2d5a3f 100%)';
-  }
+  // Gauge cursor (500–1000 → 0–100%)
+  const pct = clamp((c.t - 500) / 500 * 100, 0, 100);
+  const cur = $('#tempCursor');
+  if (cur) cur.style.left = pct + '%';
 
   // Status badge
-  const badge = $('#monBadge');
-  if (badge) { badge.textContent = lvlText; badge.className = `mon-status-badge ${lvlClass}`; }
+  const mb = $('#monBadge');
+  if (mb) { mb.textContent = txt; mb.className = `tp-badge ${cls}`; }
+
+  // Temp panel background
+  const tp = $('#tempPanel');
+  if (tp) {
+    if (lv === 2)      tp.style.background = '#1c0a0a';
+    else if (lv === 1) tp.style.background = '#1a1308';
+    else               tp.style.background = '#0f1f17';
+  }
 
   // Syngas
-  const gValues = { CO: g.CO, H2: g.H2, CH4: g.CH4, CO2: g.CO2 };
-  setText('gCO',  fmt(g.CO, 1) + '%');
-  setText('gH2',  fmt(g.H2, 1) + '%');
+  setText('gCO',  fmt(g.CO, 1)  + '%');
+  setText('gH2',  fmt(g.H2, 1)  + '%');
   setText('gCH4', fmt(g.CH4, 1) + '%');
   setText('gCO2', fmt(g.CO2, 1) + '%');
-  setWidth('barCO',  g.CO);
-  setWidth('barH2',  g.H2);
-  setWidth('barCH4', g.CH4);
-  setWidth('barCO2', g.CO2);
+  setBar('barCO',  g.CO,  35);
+  setBar('barH2',  g.H2,  28);
+  setBar('barCH4', g.CH4, 9);
+  setBar('barCO2', g.CO2, 22);
 
-  // AI anomaly box
-  const aBox = $('#anomalyBox');
-  if (aBox) {
-    aBox.classList.remove('hidden', 'ok', 'warn', 'crit');
-    aBox.classList.add(lvlClass);
-    const confBadge = $('#confBadge');
-    if (confBadge) confBadge.textContent = an.items[0].conf + '%';
-    const items = $('#anomalyItems');
-    if (items) {
-      items.innerHTML = an.items.map(it =>
+  // AI alert panel
+  const ab = $('#anomalyBox');
+  if (ab) {
+    ab.classList.remove('hidden', 'ok', 'warn', 'crit');
+    ab.classList.add(cls);
+    setText('aiConf', an.items[0].conf + '%');
+    const ai = $('#anomalyItems');
+    if (ai) {
+      ai.innerHTML = an.items.map(it =>
         `<div class="ai-item">${it.text}</div>`
       ).join('');
     }
   }
 
-  // Update charts
+  // Monitor tick counter
+  setText('monTick', `${S.mon.t.length} titik`);
+
+  // Update charts if visible
   if (S.screen === 'monitoring') updateMonitorChart();
 }
 
+function setBar(id, val, max) {
+  const el = document.getElementById(id);
+  if (el) el.style.width = clamp(val / max * 100, 0, 100) + '%';
+}
+
+/* ══════════════════════════════════════════
+   RENDER — LOGS
+══════════════════════════════════════════ */
 function renderLog() {
   const list = $('#logList');
   if (!list) return;
   const shown = S.logs.slice(0, 5);
+  if (!shown.length) {
+    list.innerHTML = '<li class="log-item"><span class="log-text" style="color:var(--tx-3)">Belum ada aktivitas</span></li>';
+    return;
+  }
   list.innerHTML = shown.map(l => `
     <li class="log-item ${l.lvl}">
       <span class="log-text">${l.text}</span>
-      <time class="log-time">${timeFmt(l.ts)}</time>
+      <span class="log-time">${tsShort(l.ts)}</span>
     </li>
   `).join('');
   setText('logCount', String(S.logs.length));
 }
 
+/* ══════════════════════════════════════════
+   RENDER — BIOMASS
+══════════════════════════════════════════ */
 function renderBiomass() {
   const q = S.q.toLowerCase();
   const f = S.filter;
-  let items = S.biomass.filter(b => {
-    const matchType = !f || b.type === f;
-    const matchQ = !q || b.type.toLowerCase().includes(q) || b.date.includes(q);
-    return matchType && matchQ;
+  const items = S.biomass.filter(b => {
+    if (f && b.type !== f) return false;
+    if (q && !b.type.toLowerCase().includes(q) && !b.date.includes(q)) return false;
+    return true;
   });
 
   const total = items.reduce((a, b) => a + b.weight, 0);
   setText('bTotal', total.toLocaleString('id-ID') + ' kg');
   setText('cBiomass', S.biomass.reduce((a, b) => a + b.weight, 0).toLocaleString('id-ID'));
 
-  const list = $('#bList');
+  const list  = $('#bList');
   const empty = $('#bEmpty');
   if (!list) return;
 
@@ -609,46 +593,69 @@ function renderBiomass() {
   }
   empty?.classList.add('hidden');
 
-  list.innerHTML = items.map(b => `
-    <div class="biomass-card" data-id="${b.id}">
-      <div class="bc-icon-wrap">${ICONS[b.type] || '🌿'}</div>
-      <div class="bc-body">
-        <div class="bc-type">${b.type}</div>
-        <div class="bc-chips">
-          <span class="bc-chip">⚖️ ${b.weight} kg</span>
-          <span class="bc-chip">💧 ${b.moisture}%</span>
+  list.innerHTML = items.map(b => {
+    const m = TYPE_MARK[b.type] || { abbr: b.type.slice(0, 2).toUpperCase(), cls: 'bm-default' };
+    return `
+      <div class="biomass-card">
+        <div class="bc-type-mark ${m.cls}">${m.abbr}</div>
+        <div class="bc-body">
+          <div class="bc-type">${b.type}</div>
+          <div class="bc-tags">
+            <span class="bc-tag">${b.weight} kg</span>
+            <span class="bc-tag">Air: ${b.moisture}%</span>
+          </div>
+          <div class="bc-date">${dtShort(b.date)}</div>
         </div>
-        <div class="bc-date">📅 ${dtFmt(b.date)}</div>
+        <div class="bc-actions">
+          <button class="bc-btn" data-action="edit" data-id="${b.id}" title="Edit" aria-label="Edit ${b.type}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="bc-btn bc-del" data-action="delete" data-id="${b.id}" title="Hapus" aria-label="Hapus ${b.type}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+          </button>
+        </div>
       </div>
-      <div class="bc-actions">
-        <button class="bc-btn" onclick="openEdit('${b.id}')" title="Edit">✏️</button>
-        <button class="bc-btn del" onclick="askDelete('${b.id}')" title="Hapus">🗑️</button>
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
 function renderChips() {
   const wrap = $('#chips');
   if (!wrap) return;
   wrap.innerHTML = CHIPS.map(c => `
-    <button class="chip ${S.filter === c.value ? 'active' : ''}"
-      onclick="setFilter('${c.value}')">${c.label}</button>
+    <button class="chip${S.filter === c.value ? ' active' : ''}" data-action="filter" data-value="${c.value}">
+      ${c.label}
+    </button>
   `).join('');
 }
 
+/* ══════════════════════════════════════════
+   RENDER — SYNC SCREEN
+══════════════════════════════════════════ */
 function renderSync() {
-  // Queue list
+  // Status card
+  const sc = $('#syncStatusCard');
+  if (sc) sc.className = `sync-status-card${S.online ? ' is-online' : ''}`;
+  setText('syncStatusTitle', S.online ? 'Terhubung ke Internet' : 'Tidak Terhubung');
+  setText('syncStatusSub',   S.online ? 'Siap melakukan sinkronisasi' : 'Mode offline — data tersimpan lokal');
+
+  const orb = $('#syncOrb');
+  if (orb) orb.className = `ssc-orb${S.online ? ' ssc-online' : ''}`;
+
+  // Last sync
+  setText('lastSyncTime', S.meta.lastSync ? tsShort(S.meta.lastSync) : 'Belum pernah');
+
+  // Queue
   const ql = $('#queueList');
   const qe = $('#queueEmpty');
   if (ql) {
     if (S.queue.length) {
       qe?.classList.add('hidden');
-      ql.innerHTML = S.queue.slice(-10).reverse().map(q => `
+      ql.innerHTML = S.queue.slice(-8).reverse().map(q => `
         <div class="queue-item">
           <span class="qi-type">${q.type}</span>
           <span class="qi-desc">${q.desc}</span>
-          <span class="qi-time">${timeFmt(q.ts)}</span>
+          <span class="qi-time mono">${tsShort(q.ts)}</span>
         </div>
       `).join('');
     } else {
@@ -661,128 +668,105 @@ function renderSync() {
   const ml = $('#methodList');
   if (ml) {
     ml.innerHTML = Object.entries(METHODS).map(([key, m]) => `
-      <div class="method-card ${S.method === key ? 'active' : ''}" onclick="selectMethod('${key}')">
-        <div class="method-icon">${m.icon}</div>
-        <div class="method-body">
-          <div class="method-name">${m.name}</div>
-          <div class="method-desc">${m.desc}</div>
+      <div class="method-card${S.method === key ? ' is-selected' : ''}" data-action="method" data-value="${key}">
+        <div class="mc-icon">${m.icon}</div>
+        <div class="mc-body">
+          <div class="mc-name">${m.name}</div>
+          <div class="mc-desc">${m.desc}</div>
         </div>
-        <div>
-          <div class="method-speed">${m.speed}</div>
-        </div>
-        <div class="method-radio"></div>
+        <div class="mc-speed mono">${m.speed}</div>
+        <div class="mc-radio"></div>
       </div>
     `).join('');
   }
 
-  // Last sync
-  setText('lastSyncTime', S.meta.lastSync ? timeFmt(S.meta.lastSync) : 'Belum pernah');
-
-  // Online status card
-  const sc = $('#syncStatusCard');
-  if (sc) {
-    if (S.online) {
-      sc.classList.add('online');
-      setText('syncStatusTitle', 'Terhubung ke Internet');
-      setText('syncStatusSub', 'Siap melakukan sinkronisasi data');
-      setText('syncOrbIcon', '🌐');
-    } else {
-      sc.classList.remove('online');
-      setText('syncStatusTitle', 'Tidak Terhubung');
-      setText('syncStatusSub', 'Mode Offline – Data tersimpan lokal');
-      setText('syncOrbIcon', '📡');
-    }
-  }
-
-  renderNetBadge();
-  renderQueueBadge();
+  renderNavBadge();
   renderSyncLog();
-}
-
-function renderNetBadge() {
-  const badge = $('#netBadge');
-  const label = $('#netLabel');
-  if (!badge) return;
-  if (S.online) {
-    badge.className = 'net-badge online';
-    if (label) label.textContent = 'Online';
-  } else {
-    badge.className = 'net-badge offline';
-    if (label) label.textContent = 'Offline';
-  }
-}
-
-function renderQueueBadge() {
-  const nb = $('#navBadge');
-  const qc = $('#queueCount');
-  if (nb) {
-    if (S.queue.length > 0) {
-      nb.classList.remove('hidden');
-      nb.textContent = S.queue.length > 99 ? '99+' : String(S.queue.length);
-    } else {
-      nb.classList.add('hidden');
-    }
-  }
-  if (qc) qc.textContent = String(S.queue.length);
 }
 
 function renderSyncLog() {
   const sl = $('#syncLog');
   if (!sl) return;
   if (!S.syncLogs.length) {
-    sl.innerHTML = '<div class="sync-log-item" style="color:var(--mu);font-size:12px">Belum ada riwayat sinkronisasi</div>';
+    sl.innerHTML = '<div class="slog-item" style="color:var(--tx-3)">Belum ada riwayat sinkronisasi</div>';
     return;
   }
   sl.innerHTML = S.syncLogs.slice(-8).reverse().map(l => `
-    <div class="sync-log-item">
-      <span class="sli-icon">${l.ok ? '✅' : '❌'}</span>
+    <div class="slog-item">
+      <span class="slog-dot ${l.ok ? 'ok' : 'fail'}"></span>
       <span>${l.msg}</span>
-      <span class="sli-time">${timeFmt(l.ts)}</span>
+      <span class="slog-time mono">${tsShort(l.ts)}</span>
     </div>
   `).join('');
 }
 
+function renderNavBadge() {
+  const nb = $('#navBadge');
+  const qc = $('#queueCount');
+  if (nb) {
+    if (S.queue.length) { nb.textContent = S.queue.length > 99 ? '99+' : S.queue.length; nb.classList.remove('hidden'); }
+    else                { nb.classList.add('hidden'); }
+  }
+  if (qc) qc.textContent = String(S.queue.length);
+}
+
+function renderNetBadge() {
+  const badge = $('#netBadge');
+  const label = $('#netLabel');
+  const dot   = $('#netDot');
+  if (badge) badge.className = `net-badge ${S.online ? 'net-online' : 'net-offline'}`;
+  if (label) label.textContent = S.online ? 'Online' : 'Offline';
+}
+
+/* ══════════════════════════════════════════
+   RENDER — PREDIKSI
+══════════════════════════════════════════ */
 function renderPred() {
-  // Update chart
   if (S.charts.pred) updatePredChart();
   else makePredChart();
 
-  // R² value (simulated)
-  const r2 = S.opt ? (0.94 + Math.random() * .03).toFixed(2) : (0.88 + Math.random() * .04).toFixed(2);
+  const r2 = (S.opt ? 0.94 + Math.random() * .03 : 0.88 + Math.random() * .04).toFixed(2);
   setText('r2Val', r2);
 
-  // Table
   const tbody = $('#predBody');
   if (!tbody || !S.pred.length) return;
+
   const peakIdx = S.pred.indexOf(Math.max(...S.pred));
   tbody.innerHTML = S.pred.map((v, i) => `
     <tr>
       <td>+${i + 1} jam</td>
-      <td><strong>${v} kW</strong></td>
-      <td><span class="pred-status ${i === peakIdx ? 'good' : 'ok'}">${i === peakIdx ? '⭐ Puncak' : '✓ Normal'}</span></td>
+      <td class="mono"><strong>${v} kW</strong></td>
+      <td><span class="pred-tag ${i === peakIdx ? 'peak' : 'normal'}">${i === peakIdx ? 'Puncak' : 'Normal'}</span></td>
     </tr>
   `).join('');
 
-  // Recommendation message
-  const peakHours = peakIdx + 1;
-  setText('predMsg', `Produksi listrik optimal dalam ${peakHours} jam (${S.pred[peakIdx]} kW)`);
+  const peakH = peakIdx + 1;
+  setText('predMsg', `Produksi optimal dalam ${peakH} jam ke depan — estimasi puncak ${S.pred[peakIdx]} kW`);
 }
 
-/* ══════════════════════════════════════════════════
+/* ══════════════════════════════════════════
+   RENDER — SIMULATION GRID
+══════════════════════════════════════════ */
+function renderSimGrid() {
+  const grid = $('#simGrid');
+  if (!grid) return;
+  grid.innerHTML = Object.entries(MODES).map(([key, m]) => `
+    <button class="sim-btn ${m.cls}${S.mode === key ? ' sim-active' : ''}"
+      data-action="mode" data-value="${key}">${m.label}</button>
+  `).join('');
+}
+
+/* ══════════════════════════════════════════
    NAVIGATION
-══════════════════════════════════════════════════ */
+══════════════════════════════════════════ */
 function navigate(screen) {
   S.screen = screen;
   $$('.screen').forEach(s => s.classList.remove('active'));
-  $$('.nav-item').forEach(n => n.classList.remove('active'));
-
+  $$('.nav-btn').forEach(b => b.classList.remove('active'));
   $(`#s-${screen}`)?.classList.add('active');
   $(`[data-screen="${screen}"]`)?.classList.add('active');
-
-  // Scroll to top
   $('#main')?.scrollTo(0, 0);
 
-  // Screen-specific init
   switch (screen) {
     case 'dashboard':
       renderLog();
@@ -792,15 +776,12 @@ function navigate(screen) {
       renderBiomass();
       break;
     case 'monitoring':
-      // Small delay so the canvas is visible before chart renders
-      setTimeout(() => {
-        if (!S.charts.mon) makeMonitorChart();
-        else updateMonitorChart();
-      }, 50);
+      setTimeout(() => S.charts.mon ? updateMonitorChart() : makeMonitorChart(), 60);
+      renderSimGrid();
       break;
     case 'prediksi':
       computePred();
-      setTimeout(() => makePredChart(), 50);
+      setTimeout(() => makePredChart(), 60);
       break;
     case 'sinkronisasi':
       renderSync();
@@ -808,70 +789,69 @@ function navigate(screen) {
   }
 }
 
-/* ══════════════════════════════════════════════════
+/* ══════════════════════════════════════════
    BIOMASS CRUD
-══════════════════════════════════════════════════ */
+══════════════════════════════════════════ */
 function openAdd() {
-  S.editingId = null;
+  S.editId = null;
   setText('modalTitle', 'Tambah Biomassa');
-  $('#editId').value = '';
-  $('#fType').value = '';
-  $('#fWeight').value = '';
+  $('#editId').value    = '';
+  $('#fType').value     = '';
+  $('#fWeight').value   = '';
   $('#fMoisture').value = '';
-  $('#fDate').value = today();
+  $('#fDate').value     = today();
   openModal();
 }
 
 function openEdit(id) {
   const b = S.biomass.find(x => x.id === id);
   if (!b) return;
-  S.editingId = id;
+  S.editId = id;
   setText('modalTitle', 'Edit Biomassa');
-  $('#editId').value = id;
-  $('#fType').value = b.type;
-  $('#fWeight').value = b.weight;
+  $('#editId').value    = id;
+  $('#fType').value     = b.type;
+  $('#fWeight').value   = b.weight;
   $('#fMoisture').value = b.moisture;
-  $('#fDate').value = b.date;
+  $('#fDate').value     = b.date;
   openModal();
 }
 
 function openModal() {
-  $('#modalOverlay').classList.remove('hidden');
+  $('#modalOverlay')?.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
-  setTimeout(() => $('#fType').focus(), 100);
+  setTimeout(() => $('#fType')?.focus(), 120);
 }
 
 function closeModal() {
-  $('#modalOverlay').classList.add('hidden');
+  $('#modalOverlay')?.classList.add('hidden');
   document.body.style.overflow = '';
 }
 
 function saveBiomass(e) {
   e.preventDefault();
-  const type     = $('#fType').value;
+  const type     = $('#fType').value.trim();
   const weight   = parseFloat($('#fWeight').value);
   const moisture = parseFloat($('#fMoisture').value);
   const date     = $('#fDate').value;
 
-  if (!type || isNaN(weight) || weight <= 0 || isNaN(moisture) || !date) {
-    toast('⚠️ Isi semua field dengan benar');
+  if (!type || isNaN(weight) || weight <= 0 || isNaN(moisture) || moisture < 0 || !date) {
+    toast('Isi semua kolom dengan benar');
     return;
   }
 
-  if (S.editingId) {
-    const idx = S.biomass.findIndex(b => b.id === S.editingId);
+  if (S.editId) {
+    const idx = S.biomass.findIndex(b => b.id === S.editId);
     if (idx !== -1) {
       S.biomass[idx] = { ...S.biomass[idx], type, weight, moisture, date };
-      addLog(`Biomassa diupdate: ${type} ${weight}kg`, 'ok');
-      enqueue('update', `Update biomassa: ${type} ${weight}kg`);
-      toast('✅ Biomassa berhasil diperbarui');
+      addLog(`Data diperbarui: ${type} ${weight} kg`, 'ok');
+      enqueue('update', `Update: ${type} ${weight} kg`);
+      toast('Data biomassa berhasil diperbarui');
     }
   } else {
-    const b = { id: uid(), type, weight, moisture, date };
-    S.biomass.unshift(b);
-    addLog(`Biomassa ditambah: ${type} ${weight}kg (kadar air ${moisture}%)`, 'ok');
-    enqueue('tambah', `Tambah biomassa: ${type} ${weight}kg`);
-    toast('✅ Biomassa berhasil ditambahkan');
+    S.biomass.unshift({ id: uid(), type, weight, moisture, date });
+    addLog(`Biomassa ditambah: ${type} ${weight} kg (air ${moisture}%)`, 'ok');
+    enqueue('tambah', `Tambah: ${type} ${weight} kg`);
+    toast('Biomassa berhasil ditambahkan');
   }
 
   closeModal();
@@ -881,12 +861,12 @@ function saveBiomass(e) {
 
 function askDelete(id) {
   S.deleteId = id;
-  $('#confirmOverlay').classList.remove('hidden');
+  $('#confirmOverlay')?.classList.remove('hidden');
 }
 
 function closeConfirm() {
   S.deleteId = null;
-  $('#confirmOverlay').classList.add('hidden');
+  $('#confirmOverlay')?.classList.add('hidden');
 }
 
 function confirmDelete() {
@@ -894,192 +874,150 @@ function confirmDelete() {
   const b = S.biomass.find(x => x.id === S.deleteId);
   S.biomass = S.biomass.filter(x => x.id !== S.deleteId);
   if (b) {
-    addLog(`Biomassa dihapus: ${b.type} ${b.weight}kg`, 'ok');
-    enqueue('hapus', `Hapus biomassa: ${b.type}`);
+    addLog(`Biomassa dihapus: ${b.type} ${b.weight} kg`, 'ok');
+    enqueue('hapus', `Hapus: ${b.type}`);
+    toast('Data berhasil dihapus');
   }
   closeConfirm();
   renderBiomass();
   save();
-  toast('🗑️ Biomassa berhasil dihapus');
 }
 
-/* ══════════════════════════════════════════════════
-   FILTER & SEARCH
-══════════════════════════════════════════════════ */
-function setFilter(val) {
-  S.filter = val;
-  renderChips();
-  renderBiomass();
-}
-
-/* ══════════════════════════════════════════════════
-   SYNC SIMULATION
-══════════════════════════════════════════════════ */
-function selectMethod(key) {
-  S.method = key;
-  renderSync();
-}
-
+/* ══════════════════════════════════════════
+   SYNC
+══════════════════════════════════════════ */
 async function doSync() {
   if (S.syncing) return;
-  if (!S.queue.length) { toast('✅ Tidak ada data untuk disinkronkan'); return; }
+  if (!S.queue.length) { toast('Tidak ada data yang perlu disinkronkan'); return; }
 
   S.syncing = true;
   const btn = $('#syncBtn');
-  const btnLabel = $('#syncBtnLabel');
-  if (btn) { btn.classList.add('syncing'); btn.disabled = true; }
-  if (btnLabel) btnLabel.textContent = 'Menyinkronkan…';
+  btn?.classList.add('is-syncing');
+  btn?.setAttribute('disabled', '');
+  setText('syncBtnLabel', 'Menyinkronkan…');
 
-  const method = METHODS[S.method];
+  const m     = METHODS[S.method];
   const count = S.queue.length;
-  const delay = method.ms;
+  toast(`Mengirim ${count} data via ${m.name}…`);
 
-  toast(`🔄 Mengirim ${count} data via ${method.name}… (~${Math.round(delay/1000)}s)`);
+  await new Promise(r => setTimeout(r, m.ms));
 
-  await new Promise(r => setTimeout(r, delay));
+  const ok = Math.random() > .07;
 
-  // Simulate success (occasionally fail for realism)
-  const success = Math.random() > .08;
-
-  if (success) {
-    S.syncLogs.push({ ts: Date.now(), ok: true, msg: `${count} data tersinkron via ${method.name}` });
+  if (ok) {
+    S.syncLogs.push({ ts: Date.now(), ok: true, msg: `${count} data tersinkron via ${m.name}` });
     S.meta.lastSync = Date.now();
     S.queue = [];
-    addLog(`Sinkronisasi berhasil: ${count} data via ${method.name}`, 'ok');
-    toast(`✅ ${count} data berhasil dikirim via ${method.name}!`);
+    addLog(`Sinkronisasi berhasil — ${count} data via ${m.name}`, 'ok');
+    toast(`${count} data berhasil dikirim via ${m.name}`);
   } else {
-    S.syncLogs.push({ ts: Date.now(), ok: false, msg: `Gagal sinkron via ${method.name}: timeout` });
-    addLog('Sinkronisasi gagal – coba lagi', 'warn');
-    toast(`❌ Sinkronisasi gagal. Coba lagi.`);
+    S.syncLogs.push({ ts: Date.now(), ok: false, msg: `Gagal sinkron via ${m.name}: koneksi timeout` });
+    addLog('Sinkronisasi gagal — coba lagi', 'warn');
+    toast('Sinkronisasi gagal. Coba lagi.');
   }
 
   if (S.syncLogs.length > 20) S.syncLogs = S.syncLogs.slice(-20);
 
   S.syncing = false;
-  if (btn) { btn.classList.remove('syncing'); btn.disabled = false; }
-  if (btnLabel) btnLabel.textContent = 'Sinkronisasi Sekarang';
+  btn?.classList.remove('is-syncing');
+  btn?.removeAttribute('disabled');
+  setText('syncBtnLabel', 'Sinkronisasi Sekarang');
 
   save();
   renderSync();
 }
 
-/* ══════════════════════════════════════════════════
+/* ══════════════════════════════════════════
    EXPORT CSV
-══════════════════════════════════════════════════ */
+══════════════════════════════════════════ */
 function exportCSV() {
-  if (!S.biomass.length) { toast('⚠️ Tidak ada data untuk diekspor'); return; }
+  if (!S.biomass.length) { toast('Tidak ada data untuk diekspor'); return; }
   const header = 'ID,Jenis,Berat (kg),Kadar Air (%),Tanggal\n';
-  const rows = S.biomass.map(b =>
-    `${b.id},${b.type},${b.weight},${b.moisture},${b.date}`
-  ).join('\n');
-  const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `sigap-biomassa-${today()}.csv`;
+  const rows   = S.biomass.map(b => `${b.id},${b.type},${b.weight},${b.moisture},${b.date}`).join('\n');
+  const blob   = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+  const url    = URL.createObjectURL(blob);
+  const a      = Object.assign(document.createElement('a'), { href: url, download: `sigap-biomassa-${today()}.csv` });
   document.body.appendChild(a); a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  toast('📥 Data berhasil diekspor ke CSV');
   addLog('Export CSV biomassa berhasil', 'ok');
+  toast('Data diekspor ke CSV');
 }
 
-/* ══════════════════════════════════════════════════
-   HELPERS
-══════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════
+   OPTIMIZE
+══════════════════════════════════════════ */
+function toggleOptimize() {
+  S.opt = !S.opt;
+  const btn = $('#optimizeBtn');
+  if (btn) {
+    btn.classList.toggle('active-state', S.opt);
+    const svg = btn.querySelector('svg');
+    const lbl = S.opt ? 'Optimasi Aktif — Klik untuk Nonaktifkan' : 'Optimalkan Gasifikasi';
+    btn.childNodes[btn.childNodes.length - 1].textContent = ' ' + lbl;
+  }
+  addLog(S.opt ? 'Mode optimasi gasifikasi diaktifkan' : 'Optimasi dinonaktifkan', 'ok');
+  computePred();
+  toast(S.opt ? 'Optimasi gasifikasi aktif' : 'Optimasi dinonaktifkan');
+}
+
+/* ══════════════════════════════════════════
+   HELPER
+══════════════════════════════════════════ */
 function setText(id, val) {
   const el = document.getElementById(id);
   if (el) el.textContent = val;
 }
 
-function setWidth(id, pct) {
-  const el = document.getElementById(id);
-  if (el) el.style.width = clamp(+pct, 0, 100) + '%';
-}
-
-/* ══════════════════════════════════════════════════
-   SIMULATION CONTROLS
-══════════════════════════════════════════════════ */
-function buildSimGrid() {
-  const grid = $('#simGrid');
-  if (!grid) return;
-  grid.innerHTML = Object.entries(MODES).map(([key, m]) => `
-    <button class="sim-btn ${m.cls} ${S.mode === key ? 'active' : ''}"
-      onclick="setMode('${key}')">${m.icon} ${m.label.replace(/^[^\s]+\s/, '')}</button>
-  `).join('');
-}
-
-function setMode(mode) {
-  S.mode = mode;
-  addLog(`Mode simulasi diubah: ${MODES[mode].label}`, mode === 'normal' ? 'ok' : 'warn');
-  buildSimGrid();
-  toast(`🎮 ${MODES[mode].label} aktif`);
-}
-
-/* ══════════════════════════════════════════════════
-   OPTIMIZE
-══════════════════════════════════════════════════ */
-function toggleOptimize() {
-  S.opt = !S.opt;
-  const btn = $('#optimizeBtn');
-  if (btn) btn.classList.toggle('active', S.opt);
-  const label = S.opt ? '⏸ Optimasi Aktif' : '✨ Optimalkan Gasifikasi';
-  if (btn) btn.innerHTML = `<span>${S.opt ? '⏸' : '✨'}</span> ${S.opt ? 'Optimasi Aktif' : 'Optimalkan Gasifikasi'}`;
-  addLog(S.opt ? 'Mode optimasi gasifikasi aktif' : 'Mode optimasi dinonaktifkan', S.opt ? 'ok' : 'warn');
-  computePred();
-  toast(S.opt ? '✨ Optimasi gasifikasi diaktifkan!' : '⏸ Optimasi dinonaktifkan');
-}
-
-/* ══════════════════════════════════════════════════
-   INIT
-══════════════════════════════════════════════════ */
-async function init() {
-  await DB.init();
-
-  // Load persisted state
-  const saved = await DB.get('state');
-  if (saved) {
-    if (saved.biomass?.length)  S.biomass  = saved.biomass;
-    if (saved.logs?.length)     S.logs     = saved.logs;
-    if (saved.queue?.length)    S.queue    = saved.queue;
-    if (saved.syncLogs?.length) S.syncLogs = saved.syncLogs;
-    if (saved.meta)             S.meta     = { ...S.meta, ...saved.meta };
-  }
-
-  // Pre-populate if first run
-  if (!S.biomass.length) {
-    S.biomass = SAMPLE_BIOMASS;
-    save();
-  }
-
-  // Set today's date in hero
-  const heroDate = $('#heroDate');
-  if (heroDate) {
-    heroDate.textContent = new Date().toLocaleDateString('id-ID', {
-      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-    });
-  }
-
-  // Set default form date
-  const fDate = $('#fDate');
-  if (fDate) fDate.value = today();
-
-  // Build sim grid
-  buildSimGrid();
-
-  // Initial renders
-  renderLog();
-  renderQueueBadge();
-  renderNetBadge();
-  renderLive();
-
-  // Event listeners
+/* ══════════════════════════════════════════
+   EVENT DELEGATION (satu listener, semua interaksi)
+══════════════════════════════════════════ */
+function setupEvents() {
   // Bottom nav
-  $$('.nav-item').forEach(btn =>
+  $$('.nav-btn').forEach(btn =>
     btn.addEventListener('click', () => navigate(btn.dataset.screen))
   );
 
-  // FAB
-  $('#fabBtn')?.addEventListener('click', openAdd);
+  // Global click delegation for dynamic content
+  document.addEventListener('click', e => {
+    const t = e.target;
+
+    // Biomass edit/delete
+    const bc = t.closest('[data-action]');
+    if (bc) {
+      e.preventDefault();
+      const { action, id, value } = bc.dataset;
+      if (action === 'edit')   { openEdit(id);     return; }
+      if (action === 'delete') { askDelete(id);    return; }
+      if (action === 'filter') { S.filter = value; renderChips(); renderBiomass(); return; }
+      if (action === 'method') { S.method = value; renderSync();  return; }
+      if (action === 'mode')   { setMode(value);   return; }
+    }
+
+    // FAB
+    if (t.closest('#fabBtn'))      { openAdd();        return; }
+
+    // Biomass form
+    if (t.id === 'modalClose' || t.id === 'cancelBtn') { closeModal();   return; }
+    if (t.id === 'modalOverlay')                        { closeModal();   return; }
+
+    // Confirm
+    if (t.id === 'confirmYes')     { confirmDelete();  return; }
+    if (t.id === 'confirmNo')      { closeConfirm();   return; }
+    if (t.id === 'confirmOverlay') { closeConfirm();   return; }
+
+    // Sync button
+    if (t.closest('#syncBtn'))     { doSync();         return; }
+
+    // Export
+    if (t.closest('#exportBtn'))   { exportCSV();      return; }
+
+    // Optimize
+    if (t.closest('#optimizeBtn')) { toggleOptimize(); return; }
+  });
+
+  // Biomass form submit
+  $('#biomassForm')?.addEventListener('submit', saveBiomass);
 
   // Search
   $('#search')?.addEventListener('input', e => {
@@ -1087,53 +1025,62 @@ async function init() {
     renderBiomass();
   });
 
-  // Export CSV
-  $('#exportBtn')?.addEventListener('click', exportCSV);
-
-  // Biomass form
-  $('#biomassForm')?.addEventListener('submit', saveBiomass);
-  $('#modalClose')?.addEventListener('click', closeModal);
-  $('#cancelBtn')?.addEventListener('click', closeModal);
-  $('#modalOverlay')?.addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeModal();
-  });
-
-  // Confirm dialog
-  $('#confirmYes')?.addEventListener('click', confirmDelete);
-  $('#confirmNo')?.addEventListener('click', closeConfirm);
-  $('#confirmOverlay')?.addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeConfirm();
-  });
-
-  // Sync button
-  $('#syncBtn')?.addEventListener('click', doSync);
-
-  // Optimize button
-  $('#optimizeBtn')?.addEventListener('click', toggleOptimize);
-
-  // Online/offline
+  // Online / offline
   window.addEventListener('online',  () => { S.online = true;  renderNetBadge(); if (S.screen === 'sinkronisasi') renderSync(); addLog('Koneksi internet tersambung', 'ok'); });
-  window.addEventListener('offline', () => { S.online = false; renderNetBadge(); if (S.screen === 'sinkronisasi') renderSync(); addLog('Koneksi internet terputus, mode offline aktif', 'warn'); });
+  window.addEventListener('offline', () => { S.online = false; renderNetBadge(); if (S.screen === 'sinkronisasi') renderSync(); addLog('Koneksi terputus — mode offline', 'warn'); });
+}
 
-  // Tick every 3 seconds
+function setMode(mode) {
+  if (!MODES[mode]) return;
+  S.mode = mode;
+  addLog(`Mode simulasi: ${MODES[mode].label}`, mode === 'normal' ? 'ok' : 'warn');
+  renderSimGrid();
+  toast(`Simulasi ${MODES[mode].label} aktif`);
+}
+
+/* ══════════════════════════════════════════
+   INIT
+══════════════════════════════════════════ */
+async function init() {
+  await DB.init();
+
+  // Load saved state
+  const saved = await DB.get('state');
+  if (saved) {
+    if (Array.isArray(saved.biomass)  && saved.biomass.length)  S.biomass  = saved.biomass;
+    if (Array.isArray(saved.logs)     && saved.logs.length)     S.logs     = saved.logs;
+    if (Array.isArray(saved.queue)    && saved.queue.length)    S.queue    = saved.queue;
+    if (Array.isArray(saved.syncLogs) && saved.syncLogs.length) S.syncLogs = saved.syncLogs;
+    if (saved.meta) S.meta = { ...S.meta, ...saved.meta };
+  }
+
+  // First-run seed
+  if (!S.biomass.length) { S.biomass = SAMPLE; save(); }
+
+  // Default form date
+  const fd = $('#fDate');
+  if (fd) fd.value = today();
+
+  // Initial UI
+  renderLog();
+  renderNavBadge();
+  renderNetBadge();
+  renderSimGrid();
+  renderLive();
+
+  // Wire up events
+  setupEvents();
+
+  // Start simulation (first ticks immediate, then every 3s)
+  tick(); tick();
   setInterval(tick, 3000);
-  // Enqueue first reading after 6s
-  setTimeout(() => { tick(); tick(); }, 100);
 
-  // SW registration
+  // Service Worker
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 
-  console.log('🔥 SIGAP v2.0 ready – offline-first gasification monitoring');
+  console.log('SIGAP v3 ready — offline-first biomass gasification monitor');
 }
 
-// Expose globals needed by inline onclick handlers
-window.openEdit    = openEdit;
-window.askDelete   = askDelete;
-window.setFilter   = setFilter;
-window.selectMethod = selectMethod;
-window.setMode     = setMode;
-
-// Bootstrap
 document.addEventListener('DOMContentLoaded', init);

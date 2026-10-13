@@ -4,376 +4,347 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#1B4332">
-  <meta name="description" content="SIGAP – Sistem Gasifikasi Biomassa Pintar untuk desa terpencil Indonesia">
-  <title>SIGAP – Sistem Gasifikasi Pintar</title>
+  <title>SIGAP — Monitoring Gasifikasi Biomassa</title>
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 </head>
 <body>
 <div id="app">
 
-  <!-- ═══ TOP BAR ═══ -->
-  <header class="topbar" id="topbar">
-    <div class="topbar-left">
-      <div class="logo-icon">🔥</div>
-      <div class="logo-text">
-        <span class="logo-brand">SIGAP</span>
-        <span class="logo-sub">Gasifikasi Biomassa Pintar</span>
+  <!-- ═══ TOPBAR ═══ -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true"></div>
+      <div class="brand-text">
+        <span class="brand-name">SIGAP</span>
+        <span class="brand-sub">Gasifikasi Biomassa Pintar</span>
       </div>
     </div>
-    <div class="topbar-right">
-      <div id="netBadge" class="net-badge offline">
-        <span class="net-dot"></span>
-        <span id="netLabel">Offline</span>
-      </div>
+    <div id="netBadge" class="net-badge net-offline">
+      <span class="net-dot" id="netDot"></span>
+      <span id="netLabel">Offline</span>
     </div>
   </header>
 
-  <!-- ═══ MAIN CONTENT ═══ -->
+  <!-- ═══ MAIN ═══ -->
   <main id="main">
 
-    <!-- ────── SCREEN 1: DASHBOARD ────── -->
+    <!-- ── SCREEN 1: DASHBOARD ── -->
     <section id="s-dashboard" class="screen active">
-      <div class="screen-pad">
+      <div class="pad">
 
-        <!-- Hero greeting -->
-        <div class="hero-banner">
-          <div class="hero-text">
-            <p class="hero-greeting">Selamat Datang 👋</p>
-            <h2 class="hero-title">Dashboard Reaktor</h2>
-            <p class="hero-date" id="heroDate"></p>
-          </div>
-          <div class="hero-icon">⚡</div>
-        </div>
-
-        <!-- Summary cards -->
-        <div class="summary-grid">
-          <div class="sumcard sumcard--biomass">
-            <div class="sumcard-icon">🌾</div>
-            <div class="sumcard-body">
-              <div class="sumcard-val" id="cBiomass">550</div>
-              <div class="sumcard-label">Biomassa (kg)</div>
+        <!-- Metric cards -->
+        <div class="metric-grid">
+          <div class="metric-card mc-green">
+            <div class="mc-top">
+              <span class="mc-label">Total Biomassa</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22c4.97-4.97 7-8.5 7-12a7 7 0 10-14 0c0 3.5 2.03 7.03 7 12z"/><circle cx="12" cy="10" r="3"/></svg>
             </div>
+            <div class="mc-val" id="cBiomass">550</div>
+            <div class="mc-unit">kg terkumpul</div>
           </div>
-          <div class="sumcard sumcard--temp">
-            <div class="sumcard-icon">🌡️</div>
-            <div class="sumcard-body">
-              <div class="sumcard-val" id="cTemp">785</div>
-              <div class="sumcard-label">Suhu Reaktor (°C)</div>
+          <div class="metric-card mc-red" id="metricTemp">
+            <div class="mc-top">
+              <span class="mc-label">Suhu Reaktor</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 14.76V3.5a2.5 2.5 0 00-5 0v11.26a4.5 4.5 0 105 0z"/></svg>
             </div>
+            <div class="mc-val mono" id="cTemp">785</div>
+            <div class="mc-unit">°C · target 700–900</div>
           </div>
-          <div class="sumcard sumcard--power">
-            <div class="sumcard-icon">⚡</div>
-            <div class="sumcard-body">
-              <div class="sumcard-val" id="cKwh">12.4</div>
-              <div class="sumcard-label">Listrik (kWh)</div>
+          <div class="metric-card mc-blue">
+            <div class="mc-top">
+              <span class="mc-label">Listrik Total</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
             </div>
+            <div class="mc-val mono" id="cKwh">12.4</div>
+            <div class="mc-unit">kWh dihasilkan</div>
           </div>
         </div>
 
-        <!-- Reactor status card -->
-        <div class="status-card" id="dashStatusCard">
-          <div class="status-card-left">
-            <div class="status-pulse" id="dashPulse"></div>
+        <!-- Reactor status -->
+        <div class="status-card" id="statusCard">
+          <div class="status-left">
+            <span class="status-dot" id="statusDot"></span>
             <div>
-              <p class="status-label">Status Reaktor</p>
-              <p class="status-value" id="dashStatusTxt">NORMAL</p>
+              <div class="status-label">Status Reaktor</div>
+              <div class="status-val" id="dashStatusTxt">NORMAL</div>
             </div>
           </div>
-          <div class="status-badge" id="dashBadge">✓ Optimal</div>
+          <div class="status-right" id="dashStatusBadge">Optimal</div>
         </div>
 
-        <!-- AI Anomaly summary (if any) -->
-        <div class="anomaly-banner hidden" id="dashAnomaly">
-          <div class="anomaly-icon">⚠️</div>
-          <div class="anomaly-body">
-            <p class="anomaly-title">Peringatan AI</p>
-            <p class="anomaly-msg" id="dashAnomalyMsg"></p>
+        <!-- Alert -->
+        <div class="alert-card hidden" id="dashAnomaly">
+          <div class="alert-header">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <span>Peringatan AI Terdeteksi</span>
+            <span class="alert-conf" id="dashAnomalyConf"></span>
           </div>
-          <div class="anomaly-conf" id="dashAnomalyConf"></div>
+          <div class="alert-msg" id="dashAnomalyMsg"></div>
         </div>
 
-        <!-- Quick stats row -->
+        <!-- Quick stats -->
         <div class="quick-stats">
           <div class="qs-item">
-            <span class="qs-val" id="qsPressure">102.3</span>
-            <span class="qs-label">Tekanan (kPa)</span>
+            <div class="qs-val mono" id="qsPressure">102.3</div>
+            <div class="qs-label">Tekanan (kPa)</div>
           </div>
-          <div class="qs-divider"></div>
+          <div class="qs-div"></div>
           <div class="qs-item">
-            <span class="qs-val" id="qsAirflow">45.2</span>
-            <span class="qs-label">Aliran Udara (L/m)</span>
+            <div class="qs-val mono" id="qsAirflow">45.2</div>
+            <div class="qs-label">Udara (L/min)</div>
           </div>
-          <div class="qs-divider"></div>
+          <div class="qs-div"></div>
           <div class="qs-item">
-            <span class="qs-val" id="qsPower">2.3</span>
-            <span class="qs-label">Daya (kW)</span>
+            <div class="qs-val mono" id="qsPower">2.30</div>
+            <div class="qs-label">Daya (kW)</div>
           </div>
         </div>
 
-        <!-- Recent activity -->
-        <div class="section-header">
-          <h3 class="section-title">Aktivitas Terbaru</h3>
-          <span class="section-badge" id="logCount">0</span>
+        <!-- Activity log -->
+        <div class="section-row">
+          <span class="section-title">Aktivitas Terbaru</span>
+          <span class="pill" id="logCount">0</span>
         </div>
-        <ul id="logList" class="activity-log"></ul>
+        <ul id="logList" class="log-list"></ul>
       </div>
     </section>
 
-    <!-- ────── SCREEN 2: BIOMASSA ────── -->
+    <!-- ── SCREEN 2: BIOMASSA ── -->
     <section id="s-biomassa" class="screen">
-      <div class="screen-pad">
-        <!-- Search bar -->
-        <div class="search-wrap">
-          <span class="search-icon">🔍</span>
-          <input id="search" class="search-input" type="search" placeholder="Cari biomassa…" autocomplete="off">
+      <div class="pad">
+        <div class="search-box">
+          <svg class="search-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input id="search" type="search" class="search-input" placeholder="Cari jenis atau tanggal…" autocomplete="off">
         </div>
 
-        <!-- Filter chips -->
-        <div id="chips" class="filter-chips"></div>
+        <div id="chips" class="chip-row"></div>
 
-        <!-- Total bar -->
         <div class="total-bar">
-          <div class="total-bar-left">
-            <span class="total-bar-label">Total Biomassa Terkumpul</span>
-            <span class="total-bar-val" id="bTotal">0 kg</span>
+          <div>
+            <div class="total-label">Total Biomassa Terkumpul</div>
+            <div class="total-val mono" id="bTotal">0 kg</div>
           </div>
-          <button class="export-btn" id="exportBtn" title="Export CSV">
-            ↓ CSV
+          <button class="ghost-btn" id="exportBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export CSV
           </button>
         </div>
 
-        <!-- Biomass list -->
         <div id="bList" class="biomass-list"></div>
-        <div id="bEmpty" class="empty-state hidden">
-          <div class="empty-icon">🌿</div>
+        <div class="empty-state hidden" id="bEmpty">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c4.97-4.97 7-8.5 7-12a7 7 0 10-14 0c0 3.5 2.03 7.03 7 12z"/><circle cx="12" cy="10" r="3"/></svg>
           <p>Belum ada data biomassa</p>
-          <p class="empty-sub">Tekan tombol + untuk menambahkan</p>
+          <p class="empty-sub">Tekan tombol + di bawah untuk menambahkan</p>
         </div>
       </div>
-
-      <!-- FAB -->
-      <button class="fab" id="fabBtn" aria-label="Tambah Biomassa">
-        <span class="fab-icon">+</span>
+      <button class="fab" id="fabBtn" aria-label="Tambah biomassa">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       </button>
     </section>
 
-    <!-- ────── SCREEN 3: MONITORING ────── -->
+    <!-- ── SCREEN 3: MONITORING ── -->
     <section id="s-monitoring" class="screen">
-      <div class="screen-pad">
+      <div class="pad">
 
-        <!-- Temperature hero card -->
-        <div class="temp-hero" id="tempHero">
-          <div class="temp-hero-head">
+        <!-- Temperature panel (dark) -->
+        <div class="temp-panel" id="tempPanel">
+          <div class="temp-panel-head">
             <div>
-              <p class="temp-hero-label">Suhu Reaktor</p>
-              <p class="temp-hero-target">Target: 700–900°C</p>
+              <div class="tp-label">Suhu Reaktor</div>
+              <div class="tp-target">Target: 700 – 900 °C</div>
             </div>
-            <span class="mon-status-badge" id="monBadge">NORMAL</span>
+            <div class="tp-badge" id="monBadge">NORMAL</div>
           </div>
-          <div class="temp-display">
-            <span class="temp-big" id="mTemp">785</span>
-            <span class="temp-unit">°C</span>
+          <div class="temp-reading">
+            <span class="temp-num mono" id="mTemp">785</span>
+            <span class="temp-deg">°C</span>
           </div>
-          <!-- Temperature gauge bar -->
-          <div class="temp-gauge-wrap">
-            <span class="tg-label">500°C</span>
-            <div class="temp-gauge-track">
-              <div class="tg-zone tg-cold"></div>
-              <div class="tg-zone tg-normal"></div>
-              <div class="tg-zone tg-hot"></div>
-              <div class="tg-marker" id="tempMarker"></div>
+          <div class="temp-gauge">
+            <div class="tg-track">
+              <div class="tg-fill tg-cold"  style="width:40%"></div>
+              <div class="tg-fill tg-ok"    style="width:40%"></div>
+              <div class="tg-fill tg-hot"   style="width:20%"></div>
+              <div class="tg-cursor" id="tempCursor"></div>
             </div>
-            <span class="tg-label">1000°C</span>
+            <div class="tg-labels">
+              <span>500°C</span><span>700°C</span><span>900°C</span><span>1000°C</span>
+            </div>
           </div>
         </div>
 
-        <!-- Sensor grid -->
-        <div class="sensor-grid">
-          <div class="sensor-card">
-            <div class="sensor-icon">💨</div>
-            <div class="sensor-val" id="mPressure">102.3</div>
+        <!-- Sensor row -->
+        <div class="sensor-row">
+          <div class="sensor-item">
+            <div class="sensor-ico">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/><path d="M20.5 10H19V8.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/><path d="M9.5 14c.83 0 1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5S8 21.33 8 20.5v-5c0-.83.67-1.5 1.5-1.5z"/><path d="M3.5 14H5v1.5c0 .83-.67 1.5-1.5 1.5S2 16.33 2 15.5 2.67 14 3.5 14z"/><path d="M14 14.5c0-.83.67-1.5 1.5-1.5h5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-5c-.83 0-1.5-.67-1.5-1.5z"/><path d="M15.5 19H14v1.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5-.67-1.5-1.5-1.5z"/><path d="M10 9.5C10 8.67 9.33 8 8.5 8h-5C2.67 8 2 8.67 2 9.5S2.67 11 3.5 11h5c.83 0 1.5-.67 1.5-1.5z"/><path d="M8.5 5H10V3.5C10 2.67 9.33 2 8.5 2S7 2.67 7 3.5 7.67 5 8.5 5z"/></svg>
+            </div>
+            <div class="sensor-val mono" id="mPressure">102.3</div>
             <div class="sensor-label">Tekanan (kPa)</div>
           </div>
-          <div class="sensor-card">
-            <div class="sensor-icon">🌀</div>
-            <div class="sensor-val" id="mAirflow">45.2</div>
-            <div class="sensor-label">Aliran Udara (L/m)</div>
+          <div class="sensor-item">
+            <div class="sensor-ico">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.59 4.59A2 2 0 1111 8H2m10.59 11.41A2 2 0 1014 16H2m15.73-8.27A2.5 2.5 0 1119.5 12H2"/></svg>
+            </div>
+            <div class="sensor-val mono" id="mAirflow">45.2</div>
+            <div class="sensor-label">Udara (L/min)</div>
           </div>
-          <div class="sensor-card">
-            <div class="sensor-icon">⚡</div>
-            <div class="sensor-val" id="mPower">2.3</div>
+          <div class="sensor-item">
+            <div class="sensor-ico">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            </div>
+            <div class="sensor-val mono" id="mPower">2.30</div>
             <div class="sensor-label">Daya (kW)</div>
           </div>
         </div>
 
-        <!-- Syngas composition -->
-        <div class="section-header" style="margin-top:4px">
-          <h3 class="section-title">Komposisi Syngas</h3>
+        <!-- Syngas -->
+        <div class="section-row">
+          <span class="section-title">Komposisi Syngas</span>
         </div>
-        <div class="syngas-card">
-          <div class="syngas-item">
-            <div class="syngas-head">
-              <span class="syngas-chem">CO</span>
-              <span class="syngas-val" id="gCO">22.5%</span>
-            </div>
-            <div class="syngas-bar-track"><div class="syngas-bar sg-co" id="barCO" style="width:22.5%"></div></div>
+        <div class="syngas-panel">
+          <div class="sg-row">
+            <span class="sg-chem">CO</span>
+            <div class="sg-track"><div class="sg-bar sg-co" id="barCO"></div></div>
+            <span class="sg-val mono" id="gCO">22.5%</span>
           </div>
-          <div class="syngas-item">
-            <div class="syngas-head">
-              <span class="syngas-chem">H₂</span>
-              <span class="syngas-val" id="gH2">15.8%</span>
-            </div>
-            <div class="syngas-bar-track"><div class="syngas-bar sg-h2" id="barH2" style="width:15.8%"></div></div>
+          <div class="sg-row">
+            <span class="sg-chem">H₂</span>
+            <div class="sg-track"><div class="sg-bar sg-h2" id="barH2"></div></div>
+            <span class="sg-val mono" id="gH2">15.8%</span>
           </div>
-          <div class="syngas-item">
-            <div class="syngas-head">
-              <span class="syngas-chem">CH₄</span>
-              <span class="syngas-val" id="gCH4">4.2%</span>
-            </div>
-            <div class="syngas-bar-track"><div class="syngas-bar sg-ch4" id="barCH4" style="width:4.2%"></div></div>
+          <div class="sg-row">
+            <span class="sg-chem">CH₄</span>
+            <div class="sg-track"><div class="sg-bar sg-ch4" id="barCH4"></div></div>
+            <span class="sg-val mono" id="gCH4">4.2%</span>
           </div>
-          <div class="syngas-item">
-            <div class="syngas-head">
-              <span class="syngas-chem">CO₂</span>
-              <span class="syngas-val" id="gCO2">12.1%</span>
-            </div>
-            <div class="syngas-bar-track"><div class="syngas-bar sg-co2" id="barCO2" style="width:12.1%"></div></div>
+          <div class="sg-row">
+            <span class="sg-chem">CO₂</span>
+            <div class="sg-track"><div class="sg-bar sg-co2" id="barCO2"></div></div>
+            <span class="sg-val mono" id="gCO2">12.1%</span>
           </div>
         </div>
 
-        <!-- AI Anomaly alert -->
-        <div id="anomalyBox" class="ai-alert hidden">
-          <div class="ai-alert-header">
-            <span class="ai-alert-icon">🤖</span>
-            <span class="ai-alert-title">Deteksi Anomali AI</span>
-            <span class="ai-conf-badge" id="confBadge">96%</span>
+        <!-- AI Anomaly -->
+        <div class="ai-panel hidden" id="anomalyBox">
+          <div class="ai-panel-head">
+            <div class="ai-label">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              Deteksi Anomali
+            </div>
+            <span class="ai-conf" id="aiConf">96%</span>
           </div>
-          <div id="anomalyItems" class="ai-alert-items"></div>
+          <div id="anomalyItems" class="ai-items"></div>
         </div>
 
-        <!-- Chart -->
-        <div class="section-header">
-          <h3 class="section-title">Grafik Real-Time (24 titik)</h3>
+        <!-- Monitor chart -->
+        <div class="section-row">
+          <span class="section-title">Grafik Real-Time</span>
+          <span class="pill" id="monTick">0 titik</span>
         </div>
-        <div class="chart-card">
+        <div class="chart-wrap">
           <canvas id="monChart" height="180"></canvas>
         </div>
 
-        <!-- Simulation controls -->
-        <div class="section-header">
-          <h3 class="section-title">Panel Simulasi</h3>
+        <!-- Simulation -->
+        <div class="section-row">
+          <span class="section-title">Panel Simulasi</span>
         </div>
         <div class="sim-grid" id="simGrid"></div>
       </div>
     </section>
 
-    <!-- ────── SCREEN 4: PREDIKSI AI ────── -->
+    <!-- ── SCREEN 4: PREDIKSI ── -->
     <section id="s-prediksi" class="screen">
-      <div class="screen-pad">
+      <div class="pad">
 
-        <!-- AI header -->
-        <div class="ai-header-card">
+        <div class="ai-header">
           <div class="ai-header-left">
-            <div class="ai-avatar">🤖</div>
+            <div class="ai-avatar">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a2 2 0 012 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 017 7h1a1 1 0 011 1v3a1 1 0 01-1 1h-1v1a2 2 0 01-2 2H5a2 2 0 01-2-2v-1H2a1 1 0 01-1-1v-3a1 1 0 011-1h1a7 7 0 017-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 012-2z"/><circle cx="7.5" cy="14.5" r="1.5"/><circle cx="16.5" cy="14.5" r="1.5"/></svg>
+            </div>
             <div>
-              <p class="ai-title">Prediksi AI</p>
-              <p class="ai-sub">Estimasi 6 jam ke depan</p>
+              <div class="ai-header-title">Prediksi AI</div>
+              <div class="ai-header-sub">Estimasi produksi 6 jam ke depan</div>
             </div>
           </div>
-          <div class="r2-badge">
-            <span class="r2-label">R²</span>
-            <span class="r2-val" id="r2Val">0.94</span>
+          <div class="r2-box">
+            <div class="r2-label">Akurasi R²</div>
+            <div class="r2-val" id="r2Val">0.94</div>
           </div>
         </div>
 
-        <!-- Prediction chart -->
-        <div class="chart-card">
+        <div class="chart-wrap">
           <canvas id="predChart" height="200"></canvas>
         </div>
 
-        <!-- Prediction recommendation -->
-        <div class="pred-rec-card" id="predRecCard">
-          <div class="pred-rec-icon">💡</div>
-          <div class="pred-rec-body">
-            <p class="pred-rec-title">Rekomendasi Produksi</p>
-            <p class="pred-rec-msg" id="predMsg">Produksi optimal dalam 2 jam</p>
-          </div>
+        <div class="rec-card" id="predRecCard">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <div class="rec-msg" id="predMsg">Menghitung prediksi…</div>
         </div>
 
-        <!-- Hourly table -->
-        <div class="section-header">
-          <h3 class="section-title">Tabel Prediksi per Jam</h3>
+        <div class="section-row">
+          <span class="section-title">Tabel Prediksi per Jam</span>
         </div>
-        <div class="pred-table-wrap">
-          <table class="pred-table" id="predTable">
-            <thead>
-              <tr><th>Jam ke</th><th>Estimasi (kW)</th><th>Status</th></tr>
-            </thead>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Waktu</th><th>Estimasi</th><th>Keterangan</th></tr></thead>
             <tbody id="predBody"></tbody>
           </table>
         </div>
 
-        <!-- Optimize button -->
-        <button class="btn-optimize" id="optimizeBtn">
-          <span>✨</span> Optimalkan Gasifikasi
+        <button class="primary-btn" id="optimizeBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          Optimalkan Gasifikasi
         </button>
       </div>
     </section>
 
-    <!-- ────── SCREEN 5: SINKRONISASI ────── -->
+    <!-- ── SCREEN 5: SINKRONISASI ── -->
     <section id="s-sinkronisasi" class="screen">
-      <div class="screen-pad">
+      <div class="pad">
 
-        <!-- Big status indicator -->
         <div class="sync-status-card" id="syncStatusCard">
-          <div class="sync-status-orb" id="syncOrb">
-            <div class="sync-orb-ring"></div>
-            <span class="sync-orb-icon" id="syncOrbIcon">📡</span>
+          <div class="ssc-orb" id="syncOrb">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" id="syncOrbSvg"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg>
           </div>
-          <div class="sync-status-info">
-            <p class="sync-status-title" id="syncStatusTitle">Tidak Terhubung</p>
-            <p class="sync-status-sub" id="syncStatusSub">Mode Offline – Data tersimpan lokal</p>
+          <div class="ssc-info">
+            <div class="ssc-title" id="syncStatusTitle">Tidak Terhubung</div>
+            <div class="ssc-sub" id="syncStatusSub">Mode offline aktif — data tersimpan lokal</div>
           </div>
         </div>
 
-        <!-- Last sync -->
-        <div class="last-sync-row">
-          <span class="last-sync-label">🕐 Terakhir sinkron:</span>
-          <span class="last-sync-val" id="lastSyncTime">Belum pernah</span>
+        <div class="info-row">
+          <span class="ir-label">Terakhir sinkron</span>
+          <span class="ir-val mono" id="lastSyncTime">Belum pernah</span>
         </div>
 
-        <!-- Pending queue -->
-        <div class="section-header">
-          <h3 class="section-title">Antrean Data Tertunda</h3>
-          <span class="section-badge" id="queueCount">0</span>
+        <div class="section-row">
+          <span class="section-title">Antrean Data</span>
+          <span class="pill" id="queueCount">0</span>
         </div>
         <div id="queueList" class="queue-list"></div>
         <div class="empty-state hidden" id="queueEmpty">
-          <div class="empty-icon">✅</div>
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
           <p>Semua data sudah tersinkronisasi</p>
         </div>
 
-        <!-- Sync methods -->
-        <div class="section-header" style="margin-top:20px">
-          <h3 class="section-title">Metode Sinkronisasi</h3>
+        <div class="section-row" style="margin-top:20px">
+          <span class="section-title">Metode Sinkronisasi</span>
         </div>
         <div class="method-list" id="methodList"></div>
 
-        <!-- Sync button -->
-        <button class="btn-sync" id="syncBtn">
-          <span class="sync-btn-icon" id="syncBtnIcon">↺</span>
+        <button class="primary-btn sync-btn" id="syncBtn">
+          <svg class="sync-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg>
           <span id="syncBtnLabel">Sinkronisasi Sekarang</span>
         </button>
 
-        <!-- Sync log -->
-        <div class="section-header" style="margin-top:20px">
-          <h3 class="section-title">Log Sinkronisasi</h3>
+        <div class="section-row" style="margin-top:20px">
+          <span class="section-title">Riwayat Sinkronisasi</span>
         </div>
-        <div id="syncLog" class="sync-log"></div>
+        <div id="syncLog" class="sync-log-list"></div>
       </div>
     </section>
 
@@ -381,90 +352,95 @@
 
   <!-- ═══ BOTTOM NAV ═══ -->
   <nav class="bottom-nav" id="bottomNav">
-    <button class="nav-item active" data-screen="dashboard">
-      <span class="nav-icon">🏠</span>
-      <span class="nav-label">Dashboard</span>
+    <button class="nav-btn active" data-screen="dashboard">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+      <span>Dashboard</span>
     </button>
-    <button class="nav-item" data-screen="biomassa">
-      <span class="nav-icon">🌾</span>
-      <span class="nav-label">Biomassa</span>
+    <button class="nav-btn" data-screen="biomassa">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22c5-5 7-9 7-13A7 7 0 005 9c0 4 2 8 7 13z"/><path d="M12 13a3 3 0 100-6 3 3 0 000 6z"/></svg>
+      <span>Biomassa</span>
     </button>
-    <button class="nav-item" data-screen="monitoring">
-      <span class="nav-icon">📊</span>
-      <span class="nav-label">Monitoring</span>
+    <button class="nav-btn" data-screen="monitoring">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      <span>Monitor</span>
     </button>
-    <button class="nav-item" data-screen="prediksi">
-      <span class="nav-icon">🤖</span>
-      <span class="nav-label">Prediksi</span>
+    <button class="nav-btn" data-screen="prediksi">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      <span>Prediksi</span>
     </button>
-    <button class="nav-item" data-screen="sinkronisasi">
-      <span class="nav-icon">🔄</span>
-      <span class="nav-label">Sinkron</span>
+    <button class="nav-btn" data-screen="sinkronisasi">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg>
+      <span>Sinkron</span>
       <span class="nav-badge hidden" id="navBadge">0</span>
     </button>
   </nav>
 
   <!-- ═══ TOAST ═══ -->
-  <div id="toast" class="toast hidden" aria-live="polite"></div>
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
   <!-- ═══ MODAL: TAMBAH / EDIT BIOMASSA ═══ -->
-  <div id="modalOverlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-    <div class="modal-sheet">
-      <div class="modal-handle"></div>
-      <div class="modal-header">
-        <h3 class="modal-title" id="modalTitle">Tambah Biomassa</h3>
-        <button class="modal-close" id="modalClose" aria-label="Tutup">✕</button>
+  <div id="modalOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="sheet">
+      <div class="sheet-drag"></div>
+      <div class="sheet-head">
+        <h2 class="sheet-title" id="modalTitle">Tambah Biomassa</h2>
+        <button class="icon-btn" id="modalClose" aria-label="Tutup">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
       </div>
-      <form id="biomassForm" class="modal-form" novalidate>
+      <form id="biomassForm" novalidate>
         <input type="hidden" id="editId">
 
-        <div class="field-group">
+        <div class="field">
           <label class="field-label" for="fType">Jenis Biomassa</label>
           <div class="select-wrap">
-            <select id="fType" class="field-select" required>
-              <option value="">Pilih jenis…</option>
-              <option value="Sekam Padi">🌾 Sekam Padi</option>
-              <option value="Jerami">🌿 Jerami</option>
-              <option value="Tongkol Jagung">🌽 Tongkol Jagung</option>
-              <option value="Kayu Chip">🪵 Kayu Chip</option>
+            <select id="fType" class="field-input" required>
+              <option value="">Pilih jenis biomassa…</option>
+              <option value="Sekam Padi">Sekam Padi</option>
+              <option value="Jerami">Jerami</option>
+              <option value="Tongkol Jagung">Tongkol Jagung</option>
+              <option value="Kayu Chip">Kayu Chip</option>
             </select>
-            <span class="select-arrow">▾</span>
+            <svg class="select-arr" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
           </div>
         </div>
 
         <div class="field-row">
-          <div class="field-group">
+          <div class="field">
             <label class="field-label" for="fWeight">Berat (kg)</label>
-            <input id="fWeight" class="field-input" type="number" min="0.1" max="9999" step="0.1" placeholder="Mis. 150" required>
+            <input id="fWeight" class="field-input" type="number" min="0.1" max="9999" step="0.1" placeholder="Contoh: 150" required>
           </div>
-          <div class="field-group">
+          <div class="field">
             <label class="field-label" for="fMoisture">Kadar Air (%)</label>
-            <input id="fMoisture" class="field-input" type="number" min="0" max="100" step="0.1" placeholder="Mis. 12" required>
+            <input id="fMoisture" class="field-input" type="number" min="0" max="100" step="0.1" placeholder="Contoh: 12" required>
           </div>
         </div>
 
-        <div class="field-group">
+        <div class="field">
           <label class="field-label" for="fDate">Tanggal</label>
           <input id="fDate" class="field-input" type="date" required>
         </div>
 
-        <div class="modal-actions">
-          <button type="button" class="btn-cancel" id="cancelBtn">Batal</button>
-          <button type="submit" class="btn-save">Simpan</button>
+        <div class="sheet-actions">
+          <button type="button" class="secondary-btn" id="cancelBtn">Batal</button>
+          <button type="submit" class="primary-btn">Simpan Data</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- ═══ CONFIRM DIALOG ═══ -->
-  <div id="confirmOverlay" class="modal-overlay hidden" role="dialog" aria-modal="true">
-    <div class="modal-sheet confirm-sheet">
-      <div class="confirm-icon">🗑️</div>
-      <h3 class="confirm-title">Hapus Data?</h3>
-      <p class="confirm-msg">Data biomassa ini akan dihapus permanen.</p>
-      <div class="modal-actions">
-        <button class="btn-cancel" id="confirmNo">Batal</button>
-        <button class="btn-delete" id="confirmYes">Hapus</button>
+  <!-- ═══ CONFIRM DELETE ═══ -->
+  <div id="confirmOverlay" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="sheet confirm-sheet">
+      <div class="sheet-drag"></div>
+      <div class="confirm-ico">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+      </div>
+      <h2 class="confirm-title">Hapus Data Ini?</h2>
+      <p class="confirm-msg">Data biomassa akan dihapus secara permanen dan tidak dapat dikembalikan.</p>
+      <div class="sheet-actions">
+        <button class="secondary-btn" id="confirmNo">Batal</button>
+        <button class="danger-btn" id="confirmYes">Hapus</button>
       </div>
     </div>
   </div>
