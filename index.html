@@ -1,132 +1,477 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#1B4332">
-<title>SIGAP – Sistem Gasifikasi Pintar</title>
-<link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1B4332">
+  <meta name="description" content="SIGAP – Sistem Gasifikasi Biomassa Pintar untuk desa terpencil Indonesia">
+  <title>SIGAP – Sistem Gasifikasi Pintar</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
 <div id="app">
-  <header class="topbar">
-    <div class="logo"><span class="flame">🔥</span><div><b>SIGAP</b><small>Gasifikasi Biomassa Pintar</small></div></div>
-    <div id="netBadge" class="net off">● Offline</div>
+
+  <!-- ═══ TOP BAR ═══ -->
+  <header class="topbar" id="topbar">
+    <div class="topbar-left">
+      <div class="logo-icon">🔥</div>
+      <div class="logo-text">
+        <span class="logo-brand">SIGAP</span>
+        <span class="logo-sub">Gasifikasi Biomassa Pintar</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div id="netBadge" class="net-badge offline">
+        <span class="net-dot"></span>
+        <span id="netLabel">Offline</span>
+      </div>
+    </div>
   </header>
 
-  <main>
-    <!-- 1. DASHBOARD -->
+  <!-- ═══ MAIN CONTENT ═══ -->
+  <main id="main">
+
+    <!-- ────── SCREEN 1: DASHBOARD ────── -->
     <section id="s-dashboard" class="screen active">
-      <div class="cards3">
-        <div class="mini"><span>🌾</span><b id="cBiomass">0</b><small>Total Biomassa (kg)</small></div>
-        <div class="mini"><span>🌡️</span><b id="cTemp">0</b><small>Suhu Reaktor (°C)</small></div>
-        <div class="mini"><span>⚡</span><b id="cKwh">0</b><small>Listrik Dihasilkan (kWh)</small></div>
+      <div class="screen-pad">
+
+        <!-- Hero greeting -->
+        <div class="hero-banner">
+          <div class="hero-text">
+            <p class="hero-greeting">Selamat Datang 👋</p>
+            <h2 class="hero-title">Dashboard Reaktor</h2>
+            <p class="hero-date" id="heroDate"></p>
+          </div>
+          <div class="hero-icon">⚡</div>
+        </div>
+
+        <!-- Summary cards -->
+        <div class="summary-grid">
+          <div class="sumcard sumcard--biomass">
+            <div class="sumcard-icon">🌾</div>
+            <div class="sumcard-body">
+              <div class="sumcard-val" id="cBiomass">550</div>
+              <div class="sumcard-label">Biomassa (kg)</div>
+            </div>
+          </div>
+          <div class="sumcard sumcard--temp">
+            <div class="sumcard-icon">🌡️</div>
+            <div class="sumcard-body">
+              <div class="sumcard-val" id="cTemp">785</div>
+              <div class="sumcard-label">Suhu Reaktor (°C)</div>
+            </div>
+          </div>
+          <div class="sumcard sumcard--power">
+            <div class="sumcard-icon">⚡</div>
+            <div class="sumcard-body">
+              <div class="sumcard-val" id="cKwh">12.4</div>
+              <div class="sumcard-label">Listrik (kWh)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Reactor status card -->
+        <div class="status-card" id="dashStatusCard">
+          <div class="status-card-left">
+            <div class="status-pulse" id="dashPulse"></div>
+            <div>
+              <p class="status-label">Status Reaktor</p>
+              <p class="status-value" id="dashStatusTxt">NORMAL</p>
+            </div>
+          </div>
+          <div class="status-badge" id="dashBadge">✓ Optimal</div>
+        </div>
+
+        <!-- AI Anomaly summary (if any) -->
+        <div class="anomaly-banner hidden" id="dashAnomaly">
+          <div class="anomaly-icon">⚠️</div>
+          <div class="anomaly-body">
+            <p class="anomaly-title">Peringatan AI</p>
+            <p class="anomaly-msg" id="dashAnomalyMsg"></p>
+          </div>
+          <div class="anomaly-conf" id="dashAnomalyConf"></div>
+        </div>
+
+        <!-- Quick stats row -->
+        <div class="quick-stats">
+          <div class="qs-item">
+            <span class="qs-val" id="qsPressure">102.3</span>
+            <span class="qs-label">Tekanan (kPa)</span>
+          </div>
+          <div class="qs-divider"></div>
+          <div class="qs-item">
+            <span class="qs-val" id="qsAirflow">45.2</span>
+            <span class="qs-label">Aliran Udara (L/m)</span>
+          </div>
+          <div class="qs-divider"></div>
+          <div class="qs-item">
+            <span class="qs-val" id="qsPower">2.3</span>
+            <span class="qs-label">Daya (kW)</span>
+          </div>
+        </div>
+
+        <!-- Recent activity -->
+        <div class="section-header">
+          <h3 class="section-title">Aktivitas Terbaru</h3>
+          <span class="section-badge" id="logCount">0</span>
+        </div>
+        <ul id="logList" class="activity-log"></ul>
       </div>
-      <div id="dashStatus" class="statusbox ok">
-        <small>Status Reaktor</small><b id="dashStatusTxt">NORMAL</b><p id="dashStatusMsg"></p>
-      </div>
-      <h3>Aktivitas Terbaru</h3>
-      <ul id="logList" class="log"></ul>
     </section>
 
-    <!-- 2. BIOMASSA -->
+    <!-- ────── SCREEN 2: BIOMASSA ────── -->
     <section id="s-biomassa" class="screen">
-      <input id="search" class="search" type="search" placeholder="🔍 Cari jenis atau tanggal…">
-      <div id="chips" class="chips"></div>
-      <div class="totalbar"><span>Total biomassa terkumpul</span><b id="bTotal">0 kg</b></div>
-      <div id="bList"></div>
+      <div class="screen-pad">
+        <!-- Search bar -->
+        <div class="search-wrap">
+          <span class="search-icon">🔍</span>
+          <input id="search" class="search-input" type="search" placeholder="Cari biomassa…" autocomplete="off">
+        </div>
+
+        <!-- Filter chips -->
+        <div id="chips" class="filter-chips"></div>
+
+        <!-- Total bar -->
+        <div class="total-bar">
+          <div class="total-bar-left">
+            <span class="total-bar-label">Total Biomassa Terkumpul</span>
+            <span class="total-bar-val" id="bTotal">0 kg</span>
+          </div>
+          <button class="export-btn" id="exportBtn" title="Export CSV">
+            ↓ CSV
+          </button>
+        </div>
+
+        <!-- Biomass list -->
+        <div id="bList" class="biomass-list"></div>
+        <div id="bEmpty" class="empty-state hidden">
+          <div class="empty-icon">🌿</div>
+          <p>Belum ada data biomassa</p>
+          <p class="empty-sub">Tekan tombol + untuk menambahkan</p>
+        </div>
+      </div>
+
+      <!-- FAB -->
+      <button class="fab" id="fabBtn" aria-label="Tambah Biomassa">
+        <span class="fab-icon">+</span>
+      </button>
     </section>
 
-    <!-- 3. MONITORING -->
+    <!-- ────── SCREEN 3: MONITORING ────── -->
     <section id="s-monitoring" class="screen">
-      <div class="card tempcard" id="tempCard">
-        <div class="row"><small>Suhu Reaktor</small><span id="monBadge" class="badge ok">NORMAL</span></div>
-        <div class="bigtemp"><b id="mTemp">785</b><span>°C</span></div>
-        <div class="gauge"><i id="gaugeMark"></i></div>
-        <div class="gscale"><span>600</span><span>Target 700–900 °C</span><span>1000</span></div>
-      </div>
-      <div class="grid2">
-        <div class="card stat"><small>Tekanan</small><b><span id="mPress">102.3</span> <em>kPa</em></b></div>
-        <div class="card stat"><small>Aliran Udara</small><b><span id="mAir">45.2</span> <em>L/mnt</em></b></div>
-      </div>
-      <div class="card">
-        <h4>Komposisi Syngas</h4>
-        <div id="syngas"></div>
-      </div>
-      <div id="alertBox" class="alert ok"></div>
-      <div class="card">
-        <h4>Suhu &amp; Tekanan (24 jam)</h4>
-        <div class="chartbox"><canvas id="chMon"></canvas></div>
-      </div>
-      <div class="card">
-        <h4>Panel Simulasi</h4>
-        <div id="simBtns" class="simbtns"></div>
+      <div class="screen-pad">
+
+        <!-- Temperature hero card -->
+        <div class="temp-hero" id="tempHero">
+          <div class="temp-hero-head">
+            <div>
+              <p class="temp-hero-label">Suhu Reaktor</p>
+              <p class="temp-hero-target">Target: 700–900°C</p>
+            </div>
+            <span class="mon-status-badge" id="monBadge">NORMAL</span>
+          </div>
+          <div class="temp-display">
+            <span class="temp-big" id="mTemp">785</span>
+            <span class="temp-unit">°C</span>
+          </div>
+          <!-- Temperature gauge bar -->
+          <div class="temp-gauge-wrap">
+            <span class="tg-label">500°C</span>
+            <div class="temp-gauge-track">
+              <div class="tg-zone tg-cold"></div>
+              <div class="tg-zone tg-normal"></div>
+              <div class="tg-zone tg-hot"></div>
+              <div class="tg-marker" id="tempMarker"></div>
+            </div>
+            <span class="tg-label">1000°C</span>
+          </div>
+        </div>
+
+        <!-- Sensor grid -->
+        <div class="sensor-grid">
+          <div class="sensor-card">
+            <div class="sensor-icon">💨</div>
+            <div class="sensor-val" id="mPressure">102.3</div>
+            <div class="sensor-label">Tekanan (kPa)</div>
+          </div>
+          <div class="sensor-card">
+            <div class="sensor-icon">🌀</div>
+            <div class="sensor-val" id="mAirflow">45.2</div>
+            <div class="sensor-label">Aliran Udara (L/m)</div>
+          </div>
+          <div class="sensor-card">
+            <div class="sensor-icon">⚡</div>
+            <div class="sensor-val" id="mPower">2.3</div>
+            <div class="sensor-label">Daya (kW)</div>
+          </div>
+        </div>
+
+        <!-- Syngas composition -->
+        <div class="section-header" style="margin-top:4px">
+          <h3 class="section-title">Komposisi Syngas</h3>
+        </div>
+        <div class="syngas-card">
+          <div class="syngas-item">
+            <div class="syngas-head">
+              <span class="syngas-chem">CO</span>
+              <span class="syngas-val" id="gCO">22.5%</span>
+            </div>
+            <div class="syngas-bar-track"><div class="syngas-bar sg-co" id="barCO" style="width:22.5%"></div></div>
+          </div>
+          <div class="syngas-item">
+            <div class="syngas-head">
+              <span class="syngas-chem">H₂</span>
+              <span class="syngas-val" id="gH2">15.8%</span>
+            </div>
+            <div class="syngas-bar-track"><div class="syngas-bar sg-h2" id="barH2" style="width:15.8%"></div></div>
+          </div>
+          <div class="syngas-item">
+            <div class="syngas-head">
+              <span class="syngas-chem">CH₄</span>
+              <span class="syngas-val" id="gCH4">4.2%</span>
+            </div>
+            <div class="syngas-bar-track"><div class="syngas-bar sg-ch4" id="barCH4" style="width:4.2%"></div></div>
+          </div>
+          <div class="syngas-item">
+            <div class="syngas-head">
+              <span class="syngas-chem">CO₂</span>
+              <span class="syngas-val" id="gCO2">12.1%</span>
+            </div>
+            <div class="syngas-bar-track"><div class="syngas-bar sg-co2" id="barCO2" style="width:12.1%"></div></div>
+          </div>
+        </div>
+
+        <!-- AI Anomaly alert -->
+        <div id="anomalyBox" class="ai-alert hidden">
+          <div class="ai-alert-header">
+            <span class="ai-alert-icon">🤖</span>
+            <span class="ai-alert-title">Deteksi Anomali AI</span>
+            <span class="ai-conf-badge" id="confBadge">96%</span>
+          </div>
+          <div id="anomalyItems" class="ai-alert-items"></div>
+        </div>
+
+        <!-- Chart -->
+        <div class="section-header">
+          <h3 class="section-title">Grafik Real-Time (24 titik)</h3>
+        </div>
+        <div class="chart-card">
+          <canvas id="monChart" height="180"></canvas>
+        </div>
+
+        <!-- Simulation controls -->
+        <div class="section-header">
+          <h3 class="section-title">Panel Simulasi</h3>
+        </div>
+        <div class="sim-grid" id="simGrid"></div>
       </div>
     </section>
 
-    <!-- 4. PREDIKSI -->
+    <!-- ────── SCREEN 4: PREDIKSI AI ────── -->
     <section id="s-prediksi" class="screen">
-      <div class="card">
-        <div class="row"><h4>Prediksi Listrik 6 Jam</h4><span class="badge ok" id="r2">R² 0.93</span></div>
-        <div class="chartbox"><canvas id="chPred"></canvas></div>
-        <p id="predMsg" class="hint"></p>
+      <div class="screen-pad">
+
+        <!-- AI header -->
+        <div class="ai-header-card">
+          <div class="ai-header-left">
+            <div class="ai-avatar">🤖</div>
+            <div>
+              <p class="ai-title">Prediksi AI</p>
+              <p class="ai-sub">Estimasi 6 jam ke depan</p>
+            </div>
+          </div>
+          <div class="r2-badge">
+            <span class="r2-label">R²</span>
+            <span class="r2-val" id="r2Val">0.94</span>
+          </div>
+        </div>
+
+        <!-- Prediction chart -->
+        <div class="chart-card">
+          <canvas id="predChart" height="200"></canvas>
+        </div>
+
+        <!-- Prediction recommendation -->
+        <div class="pred-rec-card" id="predRecCard">
+          <div class="pred-rec-icon">💡</div>
+          <div class="pred-rec-body">
+            <p class="pred-rec-title">Rekomendasi Produksi</p>
+            <p class="pred-rec-msg" id="predMsg">Produksi optimal dalam 2 jam</p>
+          </div>
+        </div>
+
+        <!-- Hourly table -->
+        <div class="section-header">
+          <h3 class="section-title">Tabel Prediksi per Jam</h3>
+        </div>
+        <div class="pred-table-wrap">
+          <table class="pred-table" id="predTable">
+            <thead>
+              <tr><th>Jam ke</th><th>Estimasi (kW)</th><th>Status</th></tr>
+            </thead>
+            <tbody id="predBody"></tbody>
+          </table>
+        </div>
+
+        <!-- Optimize button -->
+        <button class="btn-optimize" id="optimizeBtn">
+          <span>✨</span> Optimalkan Gasifikasi
+        </button>
       </div>
-      <div class="card">
-        <h4>Rekomendasi</h4>
-        <table class="tbl"><thead><tr><th>Jam</th><th>kWh</th><th>Saran</th></tr></thead><tbody id="predRows"></tbody></table>
-      </div>
-      <button id="btnOpt" class="btn primary big">⚙️ Optimalkan Gasifikasi</button>
     </section>
 
-    <!-- 5. SINKRONISASI -->
-    <section id="s-sinkron" class="screen">
-      <div id="syncStatus" class="statusbox off">
-        <small>Koneksi</small><b id="syncStatusTxt">OFFLINE</b><p id="syncStatusMsg"></p>
-        <button id="btnNet" class="btn ghost">Simulasikan koneksi</button>
-      </div>
-      <div class="card">
-        <div class="row"><h4>Data Tertunda</h4><span id="pendCount" class="badge warn">0</span></div>
-        <ul id="pendList" class="log"></ul>
-      </div>
-      <div class="card">
-        <h4>Metode Sinkronisasi</h4>
-        <div id="methods"></div>
-      </div>
-      <div id="prog" class="prog hidden"><div id="progBar"></div><p id="progTxt"></p></div>
-      <button id="btnSync" class="btn primary big">🔄 Sinkronisasi Sekarang</button>
-      <p id="lastSync" class="hint center"></p>
-      <div class="grid2">
-        <button class="btn ghost" id="exBio">⬇ CSV Biomassa</button>
-        <button class="btn ghost" id="exMon">⬇ CSV Monitoring</button>
+    <!-- ────── SCREEN 5: SINKRONISASI ────── -->
+    <section id="s-sinkronisasi" class="screen">
+      <div class="screen-pad">
+
+        <!-- Big status indicator -->
+        <div class="sync-status-card" id="syncStatusCard">
+          <div class="sync-status-orb" id="syncOrb">
+            <div class="sync-orb-ring"></div>
+            <span class="sync-orb-icon" id="syncOrbIcon">📡</span>
+          </div>
+          <div class="sync-status-info">
+            <p class="sync-status-title" id="syncStatusTitle">Tidak Terhubung</p>
+            <p class="sync-status-sub" id="syncStatusSub">Mode Offline – Data tersimpan lokal</p>
+          </div>
+        </div>
+
+        <!-- Last sync -->
+        <div class="last-sync-row">
+          <span class="last-sync-label">🕐 Terakhir sinkron:</span>
+          <span class="last-sync-val" id="lastSyncTime">Belum pernah</span>
+        </div>
+
+        <!-- Pending queue -->
+        <div class="section-header">
+          <h3 class="section-title">Antrean Data Tertunda</h3>
+          <span class="section-badge" id="queueCount">0</span>
+        </div>
+        <div id="queueList" class="queue-list"></div>
+        <div class="empty-state hidden" id="queueEmpty">
+          <div class="empty-icon">✅</div>
+          <p>Semua data sudah tersinkronisasi</p>
+        </div>
+
+        <!-- Sync methods -->
+        <div class="section-header" style="margin-top:20px">
+          <h3 class="section-title">Metode Sinkronisasi</h3>
+        </div>
+        <div class="method-list" id="methodList"></div>
+
+        <!-- Sync button -->
+        <button class="btn-sync" id="syncBtn">
+          <span class="sync-btn-icon" id="syncBtnIcon">↺</span>
+          <span id="syncBtnLabel">Sinkronisasi Sekarang</span>
+        </button>
+
+        <!-- Sync log -->
+        <div class="section-header" style="margin-top:20px">
+          <h3 class="section-title">Log Sinkronisasi</h3>
+        </div>
+        <div id="syncLog" class="sync-log"></div>
       </div>
     </section>
+
   </main>
 
-  <button id="fab" class="fab" aria-label="Tambah biomassa">+</button>
-
-  <nav class="nav" id="nav">
-    <button data-s="dashboard" class="active"><i>🏠</i>Dashboard</button>
-    <button data-s="biomassa"><i>🌾</i>Biomassa</button>
-    <button data-s="monitoring"><i>📈</i>Monitoring</button>
-    <button data-s="prediksi"><i>🤖</i>Prediksi</button>
-    <button data-s="sinkron"><i>📡</i>Sinkron<em id="navBadge" class="hidden">0</em></button>
+  <!-- ═══ BOTTOM NAV ═══ -->
+  <nav class="bottom-nav" id="bottomNav">
+    <button class="nav-item active" data-screen="dashboard">
+      <span class="nav-icon">🏠</span>
+      <span class="nav-label">Dashboard</span>
+    </button>
+    <button class="nav-item" data-screen="biomassa">
+      <span class="nav-icon">🌾</span>
+      <span class="nav-label">Biomassa</span>
+    </button>
+    <button class="nav-item" data-screen="monitoring">
+      <span class="nav-icon">📊</span>
+      <span class="nav-label">Monitoring</span>
+    </button>
+    <button class="nav-item" data-screen="prediksi">
+      <span class="nav-icon">🤖</span>
+      <span class="nav-label">Prediksi</span>
+    </button>
+    <button class="nav-item" data-screen="sinkronisasi">
+      <span class="nav-icon">🔄</span>
+      <span class="nav-label">Sinkron</span>
+      <span class="nav-badge hidden" id="navBadge">0</span>
+    </button>
   </nav>
 
-  <div id="modal" class="modal hidden">
-    <div class="sheet">
-      <h3 id="mTitle">Tambah Biomassa</h3>
-      <label>Jenis<select id="fType"></select></label>
-      <label>Berat (kg)<input id="fWeight" type="number" min="1" step="0.1" inputmode="decimal"></label>
-      <label>Kadar air (%)<input id="fMoist" type="number" min="0" max="100" step="0.1" inputmode="decimal"></label>
-      <p id="fErr" class="err"></p>
-      <div class="grid2"><button id="fCancel" class="btn ghost">Batal</button><button id="fSave" class="btn primary">Simpan</button></div>
+  <!-- ═══ TOAST ═══ -->
+  <div id="toast" class="toast hidden" aria-live="polite"></div>
+
+  <!-- ═══ MODAL: TAMBAH / EDIT BIOMASSA ═══ -->
+  <div id="modalOverlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <h3 class="modal-title" id="modalTitle">Tambah Biomassa</h3>
+        <button class="modal-close" id="modalClose" aria-label="Tutup">✕</button>
+      </div>
+      <form id="biomassForm" class="modal-form" novalidate>
+        <input type="hidden" id="editId">
+
+        <div class="field-group">
+          <label class="field-label" for="fType">Jenis Biomassa</label>
+          <div class="select-wrap">
+            <select id="fType" class="field-select" required>
+              <option value="">Pilih jenis…</option>
+              <option value="Sekam Padi">🌾 Sekam Padi</option>
+              <option value="Jerami">🌿 Jerami</option>
+              <option value="Tongkol Jagung">🌽 Tongkol Jagung</option>
+              <option value="Kayu Chip">🪵 Kayu Chip</option>
+            </select>
+            <span class="select-arrow">▾</span>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-group">
+            <label class="field-label" for="fWeight">Berat (kg)</label>
+            <input id="fWeight" class="field-input" type="number" min="0.1" max="9999" step="0.1" placeholder="Mis. 150" required>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="fMoisture">Kadar Air (%)</label>
+            <input id="fMoisture" class="field-input" type="number" min="0" max="100" step="0.1" placeholder="Mis. 12" required>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="fDate">Tanggal</label>
+          <input id="fDate" class="field-input" type="date" required>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-cancel" id="cancelBtn">Batal</button>
+          <button type="submit" class="btn-save">Simpan</button>
+        </div>
+      </form>
     </div>
   </div>
-  <div id="toast" class="toast hidden"></div>
-</div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- ═══ CONFIRM DIALOG ═══ -->
+  <div id="confirmOverlay" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal-sheet confirm-sheet">
+      <div class="confirm-icon">🗑️</div>
+      <h3 class="confirm-title">Hapus Data?</h3>
+      <p class="confirm-msg">Data biomassa ini akan dihapus permanen.</p>
+      <div class="modal-actions">
+        <button class="btn-cancel" id="confirmNo">Batal</button>
+        <button class="btn-delete" id="confirmYes">Hapus</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- #app -->
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
