@@ -432,7 +432,7 @@ function buildMonitorChart() {
 
   // Fallback kanvas jika Chart.js CDN tidak tersedia
   if (typeof Chart === 'undefined') {
-    renderCanvasChartFallback(canvas, S.monData.labels, S.monData.temp, '#E74C3C', 'Suhu (°C)');
+    renderCanvasChartFallback(canvas, S.monData.labels, S.monData.temp, '#EF4444', 'Suhu (°C)');
     return;
   }
 
@@ -444,9 +444,9 @@ function buildMonitorChart() {
         {
           label: 'Suhu Reaktor (°C)',
           data: S.monData.temp,
-          borderColor: '#E74C3C',
-          backgroundColor: 'rgba(231, 76, 60, 0.08)',
-          borderWidth: 2.2,
+          borderColor: '#EF4444',
+          backgroundColor: 'rgba(239, 68, 68, 0.08)',
+          borderWidth: 2.4,
           fill: true,
           tension: 0.35,
           pointRadius: 0,
@@ -455,9 +455,9 @@ function buildMonitorChart() {
         {
           label: 'Tekanan (kPa)',
           data: S.monData.press,
-          borderColor: '#2980B9',
-          backgroundColor: 'rgba(41, 128, 185, 0.05)',
-          borderWidth: 1.8,
+          borderColor: '#0284C7',
+          backgroundColor: 'rgba(2, 132, 199, 0.05)',
+          borderWidth: 2,
           borderDash: [4, 3],
           fill: false,
           tension: 0.35,
@@ -473,25 +473,25 @@ function buildMonitorChart() {
       plugins: {
         legend: {
           position: 'top',
-          labels: { font: { size: 10.5, family: 'Inter' }, boxWidth: 12, padding: 8 }
+          labels: { font: { size: 11, family: 'DM Sans', weight: '600' }, boxWidth: 12, padding: 10, color: '#334155' }
         }
       },
       scales: {
         x: {
-          ticks: { font: { size: 9 }, maxTicksLimit: 6, color: '#859B8F' },
-          grid: { color: '#EAEFEA' }
+          ticks: { font: { size: 9.5, family: 'JetBrains Mono' }, maxTicksLimit: 6, color: '#64748B' },
+          grid: { color: '#F1F5F9' }
         },
         yTemp: {
           position: 'left',
-          ticks: { font: { size: 9 }, color: '#E74C3C' },
-          grid: { color: '#EAEFEA' },
-          title: { display: true, text: '°C', color: '#E74C3C', font: { size: 9.5 } }
+          ticks: { font: { size: 9.5, family: 'JetBrains Mono' }, color: '#EF4444' },
+          grid: { color: '#F1F5F9' },
+          title: { display: true, text: '°C', color: '#EF4444', font: { size: 10, family: 'DM Sans', weight: '700' } }
         },
         yPress: {
           position: 'right',
-          ticks: { font: { size: 9 }, color: '#2980B9' },
+          ticks: { font: { size: 9.5, family: 'JetBrains Mono' }, color: '#0284C7' },
           grid: { drawOnChartArea: false },
-          title: { display: true, text: 'kPa', color: '#2980B9', font: { size: 9.5 } }
+          title: { display: true, text: 'kPa', color: '#0284C7', font: { size: 10, family: 'DM Sans', weight: '700' } }
         }
       },
       animation: { duration: 300 }
@@ -526,7 +526,7 @@ function buildPredictionChart() {
   const predValues = S.predictions.length === 6 ? S.predictions : [2.3, 2.45, 2.62, 2.50, 2.30, 2.15];
 
   if (typeof Chart === 'undefined') {
-    renderCanvasChartFallback(canvas, timeLabels, predValues, '#27AE60', 'Prediksi (kW)');
+    renderCanvasChartFallback(canvas, timeLabels, predValues, '#10B981', 'Prediksi (kW)');
     return;
   }
 
@@ -538,22 +538,22 @@ function buildPredictionChart() {
         {
           label: 'Estimasi Daya (kW)',
           data: predValues,
-          borderColor: '#27AE60',
-          backgroundColor: 'rgba(39, 174, 96, 0.12)',
-          borderWidth: 2.5,
+          borderColor: '#10B981',
+          backgroundColor: 'rgba(16, 185, 129, 0.12)',
+          borderWidth: 2.6,
           fill: true,
           tension: 0.4,
           pointRadius: 4.5,
-          pointBackgroundColor: '#27AE60',
+          pointBackgroundColor: '#10B981',
           pointBorderColor: '#FFFFFF',
           pointBorderWidth: 2
         },
         {
           label: 'Daya Saat Ini (Baseline)',
           data: Array(6).fill(+fmt(S.kw, 2)),
-          borderColor: '#F39C12',
+          borderColor: '#F59E0B',
           borderDash: [5, 4],
-          borderWidth: 1.5,
+          borderWidth: 1.6,
           pointRadius: 0,
           fill: false
         }
@@ -565,21 +565,21 @@ function buildPredictionChart() {
       plugins: {
         legend: {
           position: 'top',
-          labels: { font: { size: 10.5, family: 'Inter' }, boxWidth: 12, padding: 8 }
+          labels: { font: { size: 11, family: 'DM Sans', weight: '600' }, boxWidth: 12, padding: 10, color: '#334155' }
         }
       },
       scales: {
         x: {
-          ticks: { font: { size: 9.5 }, color: '#859B8F' },
-          grid: { color: '#EAEFEA' }
+          ticks: { font: { size: 9.5, family: 'JetBrains Mono' }, color: '#64748B' },
+          grid: { color: '#F1F5F9' }
         },
         y: {
           ticks: {
-            font: { size: 9.5 },
-            color: '#27AE60',
+            font: { size: 9.5, family: 'JetBrains Mono' },
+            color: '#059669',
             callback: val => val + ' kW'
           },
-          grid: { color: '#EAEFEA' },
+          grid: { color: '#F1F5F9' },
           beginAtZero: false
         }
       },
@@ -621,7 +621,7 @@ function renderCanvasChartFallback(canvas, labels, values, strokeColor, labelTex
   const getY = v => pad.t + innerH - ((v - min) / range) * innerH;
 
   // Grid garis horizontal
-  ctx.strokeStyle = '#DCE8E1';
+  ctx.strokeStyle = '#E2E8F0';
   ctx.lineWidth = 1;
   for (let g = 0; g <= 4; g++) {
     const y = pad.t + (g / 4) * innerH;
@@ -648,8 +648,8 @@ function renderCanvasChartFallback(canvas, labels, values, strokeColor, labelTex
   });
 
   // Teks legenda
-  ctx.fillStyle = '#51685C';
-  ctx.font = '10px Inter, sans-serif';
+  ctx.fillStyle = '#64748B';
+  ctx.font = '600 11px DM Sans, sans-serif';
   ctx.fillText(labelText, pad.l, 14);
 }
 
@@ -681,16 +681,16 @@ function renderLiveTelemetry() {
   if (tempTag) {
     if (t < 700) {
       tempTag.textContent = 'Rendah (<700°C)';
-      tempTag.style.color = '#2980B9';
-      tempTag.style.background = '#EBF5FB';
+      tempTag.style.color = '#0284C7';
+      tempTag.style.background = '#F0F9FF';
     } else if (t > 900) {
       tempTag.textContent = 'Tinggi (>900°C)';
-      tempTag.style.color = '#E74C3C';
-      tempTag.style.background = '#FDF2F1';
+      tempTag.style.color = '#DC2626';
+      tempTag.style.background = '#FEF2F2';
     } else {
-      tempTag.textContent = 'Normal (700-900)';
-      tempTag.style.color = '#27AE60';
-      tempTag.style.background = '#EAFAF1';
+      tempTag.textContent = 'Optimal (700-900)';
+      tempTag.style.color = '#059669';
+      tempTag.style.background = '#ECFDF5';
     }
   }
 

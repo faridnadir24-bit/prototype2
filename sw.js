@@ -1,8 +1,8 @@
 /**
  * SIGAP — Service Worker (Offline-First Cache)
- * Versi Cache: v4.0
+ * Versi Cache: v4.5
  */
-const CACHE_NAME = 'sigap-cache-v4.0';
+const CACHE_NAME = 'sigap-cache-v4.5';
 
 const OFFLINE_RESOURCES = [
   './',
