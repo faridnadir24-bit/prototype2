@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
 <div id="app">
@@ -239,27 +239,52 @@
             </span>
           </div>
 
-          <!-- Visual Gasifier Cross-section -->
-          <div class="gasifier-diagram">
-            <div class="gd-stage gd-hopper">
-              <div class="gd-stage-tag">Hopper Input</div>
-              <div class="gd-stage-sub">Biomassa Masuk</div>
+          <!-- Visual Gasifier Cross-section Schematic -->
+          <div class="reactor-cutaway">
+            <div class="rc-section rc-hopper">
+              <div class="rc-zone-pill">Inlet Biomassa</div>
+              <div class="rc-zone-title">Hopper Penampung Umpan</div>
+              <div class="rc-zone-meta">Biomassa padat tercacah (kadar air &le; 15%)</div>
             </div>
-            <div class="gd-arrow">↓</div>
-            <div class="gd-stage gd-pyrolysis">
-              <div class="gd-stage-tag">Zona Pirolisis</div>
-              <div class="gd-stage-sub">200°C – 500°C (Arang & Tar)</div>
+            <div class="rc-flow-connector">
+              <span class="rc-flow-arrow">&darr;</span>
             </div>
-            <div class="gd-arrow">↓</div>
-            <div class="gd-stage gd-combustion" id="gdCombustionBox">
-              <div class="gd-combustion-label">ZONA PEMBAKARAN (THROAT)</div>
-              <div class="gd-combustion-temp mono" id="gdThroatTemp">785 °C</div>
-              <div class="gd-stage-sub">Target Optimal: 700°C – 900°C</div>
+            <div class="rc-section rc-pyrolysis">
+              <div class="rc-zone-pill pill-amber">200&deg;C &ndash; 500&deg;C</div>
+              <div class="rc-zone-title">Zona Pirolisis &amp; Pengeringan</div>
+              <div class="rc-zone-meta">Dekomposisi termal anaerobik &rarr; biochar &amp; gas volatil</div>
             </div>
-            <div class="gd-arrow">↓</div>
-            <div class="gd-stage gd-reduction">
-              <div class="gd-stage-tag">Zona Reduksi</div>
-              <div class="gd-stage-sub">Pembentukan Syngas CO + H₂</div>
+            <div class="rc-flow-connector">
+              <span class="rc-flow-arrow">&darr;</span>
+            </div>
+            <div class="rc-throat-wrapper" id="gdCombustionBox">
+              <div class="rc-tuyere rc-tuyere-l">
+                <span class="rc-tuyere-label">Injeksi Udara</span>
+                <span class="rc-tuyere-arrow">&rarr;</span>
+              </div>
+              <div class="rc-throat-core">
+                <div class="rc-zone-pill pill-red">Throat Pembakaran (Oksidasi)</div>
+                <div class="rc-throat-temp mono" id="gdThroatTemp">785 &deg;C</div>
+                <div class="rc-zone-meta">Target Optimal: 700&deg;C &ndash; 900&deg;C</div>
+              </div>
+              <div class="rc-tuyere rc-tuyere-r">
+                <span class="rc-tuyere-arrow">&larr;</span>
+                <span class="rc-tuyere-label">Injeksi Udara</span>
+              </div>
+            </div>
+            <div class="rc-flow-connector">
+              <span class="rc-flow-arrow">&darr;</span>
+            </div>
+            <div class="rc-section rc-reduction">
+              <div class="rc-zone-pill pill-green">Zona Reduksi (Bed Arang)</div>
+              <div class="rc-zone-title">Pembentukan Gas Sintesis (Syngas)</div>
+              <div class="rc-zone-meta">Reaksi endotermik C + CO&sub2; &rarr; 2CO &amp; C + H&sub2;O &rarr; CO + H&sub2;</div>
+            </div>
+            <div class="rc-syngas-outlet">
+              <div class="rc-outlet-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+              </div>
+              <span class="rc-outlet-text">Aliran Syngas Keluar &rarr; Siklon Pembersih Tar &rarr; Genset Gasifier</span>
             </div>
           </div>
         </div>
@@ -268,8 +293,8 @@
         <div class="instrument-card" id="tempInstrumentCard">
           <div class="ic-head">
             <div>
-              <div class="ic-label">TEMPERATUR RUANG REAKSI</div>
-              <div class="ic-target">Batas Kerja Aman: 700°C – 900°C</div>
+              <div class="ic-label">Temperatur Ruang Reaksi (Inti)</div>
+              <div class="ic-target">Batas Kerja Aman: 700&deg;C &ndash; 900&deg;C</div>
             </div>
             <span class="ic-status-badge badge-normal" id="monStatusBadge">NORMAL</span>
           </div>

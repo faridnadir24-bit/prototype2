@@ -854,7 +854,7 @@ function renderBiomassScreen() {
           <div class="bci-meta-tags">
             <span class="bci-tag mono">${item.weight} kg</span>
             <span class="bci-tag mono ${isHighMoisture ? 'tag-moisture-warn' : ''}">
-              Air: ${item.moisture}%${isHighMoisture ? ' ⚠️' : ''}
+              Air: ${item.moisture}%${isHighMoisture ? ' (Tinggi)' : ''}
             </span>
           </div>
           <div class="bci-date">Pencatatan: ${fmtDate(item.date)}</div>
@@ -1676,7 +1676,7 @@ async function initializeSigapApp() {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 
-  console.log('✅ SIGAP v3.2 — Sistem Gasifikasi Biomassa Pintar siap digunakan secara offline.');
+  console.log('[SIGAP v4.0] Sistem Gasifikasi Biomassa Pintar siap digunakan secara offline.');
 }
 
 // Jalankan saat DOM siap
